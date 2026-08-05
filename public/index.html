@@ -201,8 +201,9 @@
 
 <script>
 (function(){
-  // Change this if your Pulse project page base differs.
-  var PURL = "https://app.bonito.in/projects";
+  // Pulse routes by internal project id (not the PID). Links open the project's Files (drive) view.
+  var PURL = "https://pulse.bonito.in/projects";
+  function projUrl(r){ return r.id ? PURL + '/' + encodeURIComponent(r.id) + '/drive' : null; }
   var API = "/api/cdp";
   var PARAMS = [["rgm_notes","RGM/DCM Notes"],["rgm_rec","RGM Recording"],["cdp_notes","CDP Notes"],["cdp_rec","CDP Recording"],["cdd_form","CDD Form"],["cdp_pdf","CDP PDF"],["dm_review","DM Review"]];
 
@@ -214,7 +215,7 @@
 
   // ---- normalize a server row to the shape the UI expects ----
   function normalize(r){
-    return { pid:String(r.project_no||''), cx:r.cx_name||'', branch:r.branch||'', designer:r.designer||'', dm:r.design_manager||'',
+    return { pid:String(r.project_no||''), id:r.project_id||'', cx:r.cx_name||'', branch:r.branch||'', designer:r.designer||'', dm:r.design_manager||'',
       cdp_date:r.cdp_date||'', net_pct:r.net_pct||0, net_band:r.net_band||'red', status:r.project_status||'',
       gross:r.gross_budget||'', cdp_budget:r.cdp_budget||'', pdf_ok:!!r.cdp_pdf_ok, pdf_name:r.cdp_pdf_filename||'', reason:r.net_reason||'',
       dm_scores:r.dm_scores||{},
@@ -321,27 +322,29 @@
 
   // ---- DETAILED render ----
   function ynCell(v){ return v ? '<span class="yn-yes">Yes</span>' : '<span class="yn-no">No</span>'; }
-  function checkCell(ok, pid){
-    var url = PURL + '/' + encodeURIComponent(pid);
+  function checkCell(ok, r){
+    var url = projUrl(r);
     var cls = ok ? 'tick' : 'cross';
     var sym = ok ? '\u2713' : '\u2717';
-    return '<a class="'+cls+'" href="'+url+'" target="_blank" title="Open project '+esc(pid)+'">'+sym+'</a>';
+    if(!url) return '<span class="'+cls+'">'+sym+'</span>';
+    return '<a class="'+cls+'" href="'+url+'" target="_blank" title="Open project '+esc(r.pid)+' in Pulse">'+sym+'</a>';
   }
   function rowHtml(r){
     var d=r.dm_scores||{};
-    // PDF: no OCR on Netlify. Present -> link out to the Pulse project page; else "None".
+    var url=projUrl(r);
+    // PDF: no OCR on Netlify. Present -> open the project's Files view in Pulse; else "None".
     var pdf = r.checks.cdp_pdf
-      ? '<a class="pdf-link" href="'+PURL+'/'+encodeURIComponent(r.pid)+'" target="_blank" title="'+esc(r.pdf_name||'CDP PDF')+'">Present</a>'
+      ? (url ? '<a class="pdf-link" href="'+url+'" target="_blank" title="'+esc(r.pdf_name||'CDP PDF')+'">Present</a>' : '<span class="yn-yes">Present</span>')
       : '<span class="yn-no">None</span>';
     return '<tr>'+
       '<td class="sticky">'+esc(r.pid)+'</td>'+
       '<td>'+esc(r.cx)+'</td><td>'+esc(r.branch)+'</td><td><span class="pill">'+esc(r.status)+'</span></td><td>'+esc(r.designer)+'</td><td>'+(esc(r.cdp_date)||'\u2014')+'</td>'+
       '<td>'+(esc(r.gross)||'\u2014')+'</td><td>'+(esc(r.cdp_budget)||'\u2014')+'</td>'+
-      '<td class="cc">'+checkCell(r.checks.rgm_notes,r.pid)+'</td>'+
-      '<td class="cc">'+checkCell(r.checks.rgm_rec,r.pid)+'</td>'+
-      '<td class="cc">'+checkCell(r.checks.cdp_notes,r.pid)+'</td>'+
-      '<td class="cc">'+checkCell(r.checks.cdp_rec,r.pid)+'</td>'+
-      '<td class="cc">'+checkCell(r.checks.cdd_form,r.pid)+'</td>'+
+      '<td class="cc">'+checkCell(r.checks.rgm_notes,r)+'</td>'+
+      '<td class="cc">'+checkCell(r.checks.rgm_rec,r)+'</td>'+
+      '<td class="cc">'+checkCell(r.checks.cdp_notes,r)+'</td>'+
+      '<td class="cc">'+checkCell(r.checks.cdp_rec,r)+'</td>'+
+      '<td class="cc">'+checkCell(r.checks.cdd_form,r)+'</td>'+
       '<td class="cc">'+pdf+'</td>'+
       '<td class="cc">'+ynCell(r.checks.dm_review)+'</td>'+
       '<td class="net net-'+r.net_band+'">'+r.net_pct+'%</td>'+
