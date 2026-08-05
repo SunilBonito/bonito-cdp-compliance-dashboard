@@ -143,9 +143,10 @@ exports.handler = async (event) => {
     if (pidParam) {
       // PID search ignores date/branch filters
       pidSearch = true;
-      const pids = pidParam.split(",").map((s) => s.trim()).filter(Boolean);
+      const pids = pidParam.split(",").map((s) => s.trim()).filter(Boolean)
+        .map((s) => parseInt(s, 10)).filter((n) => !isNaN(n));
       const r = await db.query(
-        `SELECT id FROM projects WHERE project_no = ANY($1::text[])`,
+        `SELECT id FROM projects WHERE project_no = ANY($1::int[])`,
         [pids]
       );
       projectIds = r.rows.map((x) => x.id);
@@ -327,29 +328,31 @@ const emptySummary = () => ({
 
 // ---- data loaders (bulk, id-keyed) -------------------------------------
 async function projectMeta(db, ids) {
-  // designer prefers net_designer role then designer; design_manager role.
-  // current_user(role) in Rails = latest current assignment for that role code.
+  // users store name as fname + lname; project_users links to roles via role_id.
+  // No `current` column here — `primary` marks the active assignment, with a
+  // fallback to the most recent row by id when nothing is flagged primary.
+  const uname = "TRIM(CONCAT(u.fname, ' ', u.lname))";
+  const roleLookup = (roleCode) => `
+     LEFT JOIN LATERAL (
+       SELECT ${uname} AS nm
+       FROM project_users pu
+       JOIN users u ON u.id = pu.user_id
+       JOIN roles ro ON ro.id = pu.role_id AND ro.code = '${roleCode}'
+       WHERE pu.project_id = p.id
+       ORDER BY pu.primary DESC, pu.id DESC
+       LIMIT 1
+     )`;
   const r = await db.query(
     `SELECT p.id, p.project_no, acc.name AS cx_name, g.name AS branch,
-            dsg.name AS designer, ndsg.name AS net_designer, dm.name AS design_manager
+            dsg.nm AS designer, ndsg.nm AS net_designer,
+            dm.nm AS design_manager, ndm.nm AS net_design_manager
      FROM projects p
      LEFT JOIN accounts acc ON acc.id = p.account_id
      LEFT JOIN groups g ON g.id = p.group_id
-     LEFT JOIN LATERAL (
-       SELECT u.name FROM project_users pu JOIN users u ON u.id = pu.user_id
-       WHERE pu.project_id = p.id AND pu.role = 'designer' AND pu.current = true
-       ORDER BY pu.id DESC LIMIT 1
-     ) dsg ON true
-     LEFT JOIN LATERAL (
-       SELECT u.name FROM project_users pu JOIN users u ON u.id = pu.user_id
-       WHERE pu.project_id = p.id AND pu.role = 'net_designer' AND pu.current = true
-       ORDER BY pu.id DESC LIMIT 1
-     ) ndsg ON true
-     LEFT JOIN LATERAL (
-       SELECT u.name FROM project_users pu JOIN users u ON u.id = pu.user_id
-       WHERE pu.project_id = p.id AND pu.role = 'design_manager' AND pu.current = true
-       ORDER BY pu.id DESC LIMIT 1
-     ) dm ON true
+     ${roleLookup("designer")} dsg ON true
+     ${roleLookup("net_designer")} ndsg ON true
+     ${roleLookup("design_manager")} dm ON true
+     ${roleLookup("net_design_manager")} ndm ON true
      WHERE p.id = ANY($1::bigint[])`,
     [ids]
   );
@@ -360,7 +363,8 @@ async function projectMeta(db, ids) {
       cx_name: x.cx_name,
       branch: x.branch,
       designer: x.net_designer || x.designer || "",
-      design_manager: x.design_manager || "",
+      // CDP is the Net phase, so prefer the Net Design Manager for this view.
+      design_manager: x.net_design_manager || x.design_manager || "",
     };
   }
   return out;
