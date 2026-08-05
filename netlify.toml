@@ -1,0 +1,12 @@
+[build]
+  publish = "public"
+  functions = "netlify/functions"
+
+[functions]
+  node_bundler = "esbuild"
+
+# nice short path: /api/cdp -> the function
+[[redirects]]
+  from = "/api/cdp"
+  to = "/.netlify/functions/cdp-compliance"
+  status = 200

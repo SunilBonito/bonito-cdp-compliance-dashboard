@@ -1,0 +1,9 @@
+{
+  "name": "cdp-compliance-dashboard",
+  "version": "1.0.0",
+  "description": "CDP Compliance Dashboard - Netlify + Postgres read replica",
+  "private": true,
+  "dependencies": {
+    "pg": "^8.22.0"
+  }
+}

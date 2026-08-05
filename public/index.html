@@ -1,0 +1,461 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>CDP Compliance — Executive View</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Instrument+Serif&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<style>
+  /* Link out to the Pulse project page. Change if your project URL base differs. */
+  html,body{ margin:0; }
+  #cdp-exec{ display:block; --ink:#12211f; --ink2:#3f5551; --muted:#7d928d; --line:#e7ede9;
+    --bg:#f6f8f7; --card:#fff; --teal:#0b6b5f; --teal-soft:#e6f2ef; --good:#0f7a4d; --mid:#c07a1a; --bad:#b23b3b;
+    background:var(--bg); min-height:100vh; padding:32px 38px 70px; }
+  #cdp-exec, #cdp-exec *{ box-sizing:border-box; font-family:'Inter',sans-serif; -webkit-font-smoothing:antialiased; color:var(--ink); }
+  #cdp-exec .wrap{ max-width:1520px; margin:0 auto; }
+  #cdp-exec code{ font-family:'JetBrains Mono',monospace; font-size:11px; }
+
+  #cdp-exec .top{ display:flex; justify-content:space-between; align-items:flex-end; gap:24px; border-bottom:1px solid var(--line); padding-bottom:20px; margin-bottom:22px; flex-wrap:wrap; }
+  #cdp-exec .eyebrow{ font-size:11px; font-weight:600; letter-spacing:.18em; text-transform:uppercase; color:var(--teal); margin:0 0 8px; }
+  #cdp-exec .h1{ font-family:'Instrument Serif',serif; font-size:36px; font-weight:400; line-height:1; margin:0; letter-spacing:-.01em; }
+  #cdp-exec .sub{ font-size:13px; color:var(--muted); margin:9px 0 0; }
+  #cdp-exec .toggle{ display:inline-flex; background:#eef3f1; border:1px solid var(--line); border-radius:9px; padding:3px; }
+  #cdp-exec .toggle button{ border:none; background:transparent; font-family:inherit; font-size:12.5px; font-weight:600; color:var(--ink2); padding:8px 18px; border-radius:7px; cursor:pointer; }
+  #cdp-exec .toggle button.active{ background:var(--teal); color:#fff; box-shadow:0 1px 2px rgba(11,107,95,.25); }
+
+  #cdp-exec .filterbar{ display:flex; gap:12px; align-items:end; flex-wrap:wrap; background:var(--card); border:1px solid var(--line); border-radius:12px; padding:14px 16px; margin-bottom:22px; }
+  #cdp-exec .fg{ display:flex; flex-direction:column; gap:5px; }
+  #cdp-exec .fg > label{ font-size:10.5px; color:var(--muted); text-transform:uppercase; letter-spacing:.05em; font-weight:600; }
+  #cdp-exec .fg input[type=date], #cdp-exec .fg input[type=number]{ padding:8px 10px; border:1px solid var(--line); border-radius:7px; font-size:13px; font-family:inherit; background:#fff; color:var(--ink); }
+  #cdp-exec .ms{ position:relative; }
+  #cdp-exec .ms-btn{ padding:8px 12px; border:1px solid var(--line); border-radius:7px; font-size:13px; background:#fff; cursor:pointer; min-width:150px; text-align:left; color:var(--ink); display:flex; justify-content:space-between; align-items:center; gap:8px; }
+  #cdp-exec .ms-btn .cnt{ background:var(--teal-soft); color:var(--teal); font-size:11px; font-weight:600; border-radius:9px; padding:1px 7px; }
+  #cdp-exec .ms-menu{ display:none; position:absolute; top:calc(100% + 4px); left:0; z-index:20; background:#fff; border:1px solid var(--line); border-radius:9px; box-shadow:0 8px 24px rgba(18,33,31,.12); padding:6px; min-width:200px; max-height:260px; overflow:auto; }
+  #cdp-exec .ms.open .ms-menu{ display:block; }
+  #cdp-exec .ms-menu label{ display:flex; align-items:center; gap:9px; padding:7px 9px; font-size:13px; border-radius:6px; cursor:pointer; color:var(--ink); }
+  #cdp-exec .ms-menu label:hover{ background:var(--teal-soft); }
+  #cdp-exec .ms-menu input{ accent-color:var(--teal); }
+  #cdp-exec .btn{ font-size:13px; font-weight:600; padding:9px 16px; border-radius:8px; border:1px solid transparent; cursor:pointer; font-family:inherit; text-decoration:none; display:inline-block; }
+  #cdp-exec .btn-go{ background:var(--teal); color:#fff; } #cdp-exec .btn-go:hover{ background:#095a50; }
+  #cdp-exec .btn-ghost{ background:#fff; color:var(--ink2); border-color:var(--line); }
+
+  #cdp-exec .kpis{ display:grid; grid-template-columns:repeat(4,1fr); gap:1px; background:var(--line); border:1px solid var(--line); border-radius:14px; overflow:hidden; margin-bottom:24px; }
+  #cdp-exec .kpi{ background:var(--card); padding:19px 22px; }
+  #cdp-exec .kpi .lab{ font-size:11px; font-weight:600; letter-spacing:.06em; text-transform:uppercase; color:var(--muted); margin:0 0 10px; }
+  #cdp-exec .kpi .val{ font-size:31px; font-weight:600; line-height:1; letter-spacing:-.02em; font-variant-numeric:tabular-nums; }
+  #cdp-exec .kpi .foot{ font-size:11.5px; color:var(--muted); margin-top:8px; }
+
+  #cdp-exec .grid{ display:grid; grid-template-columns:1.15fr .85fr; gap:18px; margin-bottom:18px; }
+  #cdp-exec .grid.eq{ grid-template-columns:1fr 1fr; }
+  @media (max-width:1000px){ #cdp-exec .grid,#cdp-exec .grid.eq{ grid-template-columns:1fr; } #cdp-exec .kpis{ grid-template-columns:repeat(2,1fr); } }
+  #cdp-exec .panel{ background:var(--card); border:1px solid var(--line); border-radius:14px; padding:20px 22px; }
+  #cdp-exec .panel h3{ font-size:14px; font-weight:600; margin:0 0 2px; }
+  #cdp-exec .panel .psub{ font-size:11.5px; color:var(--muted); margin:0 0 16px; }
+  #cdp-exec .box{ position:relative; height:250px; } #cdp-exec .box.sm{ height:230px; }
+  #cdp-exec .rank{ display:flex; flex-direction:column; gap:11px; }
+  #cdp-exec .rrow{ display:grid; grid-template-columns:120px 1fr 44px; align-items:center; gap:12px; }
+  #cdp-exec .rrow .nm{ font-size:12.5px; color:var(--ink2); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  #cdp-exec .rrow .bar{ height:8px; border-radius:5px; background:#eef3f1; overflow:hidden; }
+  #cdp-exec .rrow .bar span{ display:block; height:100%; border-radius:5px; }
+  #cdp-exec .rrow .pc{ font-size:12.5px; font-weight:600; text-align:right; font-variant-numeric:tabular-nums; }
+
+  #cdp-exec #v-detailed{ display:none; }
+  #cdp-exec.show-detailed #v-overview{ display:none; }
+  #cdp-exec.show-detailed #v-detailed{ display:block; }
+
+  #cdp-exec .actionbar{ display:flex; gap:10px; align-items:center; flex-wrap:wrap; margin-bottom:14px; }
+  #cdp-exec .search-uni{ display:flex; gap:6px; align-items:center; }
+  #cdp-exec .search-uni input{ padding:9px 12px; border:1px solid var(--line); border-radius:8px; font-size:13px; min-width:280px; font-family:inherit; }
+  #cdp-exec .spacer{ flex:1; }
+  #cdp-exec .tbl-wrap{ background:var(--card); border:1px solid var(--line); border-radius:12px; overflow:hidden; margin-bottom:26px; }
+  #cdp-exec .tbl-head{ padding:12px 18px; border-bottom:1px solid var(--line); display:flex; justify-content:space-between; align-items:center; gap:10px; flex-wrap:wrap; }
+  #cdp-exec .tbl-head h3{ margin:0; font-size:13px; font-weight:600; letter-spacing:.03em; text-transform:uppercase; color:var(--ink2); }
+  #cdp-exec .tbl-head .meta{ font-size:12px; color:var(--muted); }
+  #cdp-exec .tbl-scroll{ overflow:auto; max-height:70vh; }
+  #cdp-exec table.ct{ width:100%; border-collapse:separate; border-spacing:0; font-size:12px; }
+  #cdp-exec table.ct th{ background:#0e3b36; color:#eaf3f1; padding:10px 8px; text-align:left; font-weight:600; font-size:10.5px; text-transform:uppercase; letter-spacing:.03em; white-space:nowrap; position:sticky; top:0; z-index:3; }
+  #cdp-exec table.ct th.sticky, #cdp-exec table.ct td.sticky{ position:sticky; left:0; z-index:2; }
+  #cdp-exec table.ct th.sticky{ z-index:4; }
+  #cdp-exec table.ct td{ padding:8px; border-bottom:1px solid #f0f4f3; white-space:nowrap; color:#27332f; }
+  #cdp-exec table.ct td.sticky{ background:#fff; font-weight:600; }
+  #cdp-exec table.ct tbody tr:nth-child(even) td{ background:#f8fbfa; }
+  #cdp-exec table.ct tbody tr:nth-child(even) td.sticky{ background:#f8fbfa; }
+  #cdp-exec table.ct tbody tr:hover td{ background:#eef7f5; }
+  #cdp-exec .tick{ color:var(--good); font-weight:700; text-decoration:none; }
+  #cdp-exec .cross{ color:var(--bad); font-weight:700; text-decoration:none; }
+  #cdp-exec a.tick:hover, #cdp-exec a.cross:hover{ text-decoration:underline; }
+  #cdp-exec td.cc{ text-align:center; }
+  #cdp-exec .net{ text-align:center; font-weight:700; color:#fff; }
+  #cdp-exec .net-green{ background:#0f7a4d; } #cdp-exec .net-amber{ background:#c07a1a; } #cdp-exec .net-red{ background:#b23b3b; }
+  #cdp-exec .pill{ display:inline-block; padding:2px 8px; border-radius:10px; font-size:11px; font-weight:500; background:#eef3f1; color:var(--ink2); }
+  #cdp-exec .yn-yes{ color:var(--good); font-weight:600; } #cdp-exec .yn-no{ color:var(--bad); font-weight:600; }
+  #cdp-exec .pdf-link{ color:var(--teal); text-decoration:none; font-weight:600; }
+  #cdp-exec .extra{ display:none; } #cdp-exec.show-dm .extra{ display:table-cell; }
+  #cdp-exec .empty{ padding:50px; text-align:center; color:var(--muted); font-size:14px; }
+  #cdp-exec .notice{ background:#fdf6e3; border:1px solid #f0e0a8; color:#7a5c14; border-radius:10px; padding:13px 16px; margin-bottom:18px; font-size:13px; }
+  #cdp-exec .loading{ padding:60px; text-align:center; color:var(--muted); font-size:14px; }
+</style>
+</head>
+<body>
+<div id="cdp-exec">
+  <div class="wrap">
+
+    <div class="top">
+      <div>
+        <p class="eyebrow">CDP Compliance &middot; Executive View</p>
+        <h1 class="h1">Design Presentation Compliance</h1>
+        <p class="sub"><span id="hdr-branch">All Experience Centres</span> &middot; <span id="hdr-range">&mdash;</span> &middot; <span id="hdr-count">0</span> presentations reviewed</p>
+      </div>
+      <div class="toggle">
+        <button type="button" id="tab-o" class="active" onclick="cdpView('overview')">Overview</button>
+        <button type="button" id="tab-d" onclick="cdpView('detailed')">Detailed</button>
+      </div>
+    </div>
+
+    <div class="filterbar">
+      <div class="fg"><label>From</label><input type="date" id="f-from"></div>
+      <div class="fg"><label>To</label><input type="date" id="f-to"></div>
+      <div class="fg"><label>Min note chars</label><input type="number" id="f-minchars" value="100" style="width:90px"></div>
+      <button type="button" class="btn btn-go" id="btn-load">Load range</button>
+
+      <div class="fg">
+        <label>Experience Centre</label>
+        <div class="ms" id="ms-ec">
+          <button type="button" class="ms-btn" onclick="cdpToggleMenu('ms-ec')"><span>All Centres</span><span class="cnt" id="ec-cnt">All</span></button>
+          <div class="ms-menu" id="ec-menu"></div>
+        </div>
+      </div>
+      <div class="fg">
+        <label>Design Manager</label>
+        <div class="ms" id="ms-dm">
+          <button type="button" class="ms-btn" onclick="cdpToggleMenu('ms-dm')"><span>All DMs</span><span class="cnt" id="dm-cnt">All</span></button>
+          <div class="ms-menu" id="dm-menu"></div>
+        </div>
+      </div>
+      <div class="fg">
+        <label>Project Status</label>
+        <div class="ms" id="ms-st">
+          <button type="button" class="ms-btn" onclick="cdpToggleMenu('ms-st')"><span>All Statuses</span><span class="cnt" id="st-cnt">All</span></button>
+          <div class="ms-menu" id="st-menu"></div>
+        </div>
+      </div>
+      <button type="button" class="btn btn-ghost" id="btn-reset">Reset</button>
+    </div>
+
+    <div id="notice-slot"></div>
+
+    <!-- ===================== OVERVIEW ===================== -->
+    <div id="v-overview">
+      <div class="kpis">
+        <div class="kpi"><p class="lab">Presentations Reviewed</p><div class="val" id="k-total">0</div><div class="foot" id="k-total-foot"></div></div>
+        <div class="kpi"><p class="lab">Avg Compliance</p><div class="val" id="k-avg">0%</div><div class="foot">across selected filters</div></div>
+        <div class="kpi"><p class="lab">Fully Compliant</p><div class="val" id="k-full">0</div><div class="foot" id="k-full-foot"></div></div>
+        <div class="kpi"><p class="lab">Lowest Parameter</p><div class="val" id="k-low" style="font-size:22px;color:var(--bad)">&mdash;</div><div class="foot" id="k-low-foot"></div></div>
+      </div>
+
+      <div class="grid">
+        <div class="panel"><h3>Compliance by Experience Centre</h3><p class="psub">Average compliance across reviewed presentations</p><div class="box"><canvas id="c-ec"></canvas></div></div>
+        <div class="panel"><h3>Parameter Pass Rate</h3><p class="psub">Share of presentations meeting each check</p><div class="box"><canvas id="c-param"></canvas></div></div>
+      </div>
+      <div class="grid eq">
+        <div class="panel"><h3>Design Managers &mdash; Ranked</h3><p class="psub">Average compliance under each DM</p><div id="dm-rank" class="rank"></div></div>
+        <div class="panel"><h3>Compliance Trend</h3><p class="psub">Weekly average (week starting)</p><div class="box sm"><canvas id="c-trend"></canvas></div></div>
+      </div>
+    </div>
+
+    <!-- ===================== DETAILED ===================== -->
+    <div id="v-detailed">
+      <div class="actionbar">
+        <div class="search-uni">
+          <input type="text" id="uni-search" placeholder="Search any PID(s), comma-separated &mdash; ignores date range" autocomplete="off">
+          <button type="button" class="btn btn-go" id="uni-go">Search</button>
+          <button type="button" class="btn btn-ghost" id="uni-clear">Clear</button>
+        </div>
+        <div class="spacer"></div>
+        <button type="button" class="btn btn-ghost" id="toggle-dm">+ Show DM scores &amp; details</button>
+        <button type="button" class="btn btn-ghost" id="csv-link">&darr; CSV</button>
+      </div>
+
+      <div class="tbl-wrap">
+        <div class="tbl-head"><h3>Designer-Level Detail</h3><span class="meta"><span id="d-count">0</span> project(s) <span id="search-note"></span></span></div>
+        <div class="tbl-scroll">
+          <table class="ct">
+            <thead><tr>
+              <th class="sticky">PID</th><th>CX Name</th><th>Branch</th><th>Status</th><th>Designer</th><th>CDP Date</th>
+              <th>Gross Budget</th><th>CDP Budget</th>
+              <th>RGM/DCM</th><th>RGM Rec.</th><th>CDP Notes</th><th>CDP Rec.</th><th>CDD Form</th><th>CDP PDF</th>
+              <th>DM Review</th><th>NET</th>
+              <th class="extra">Design Manager</th>
+              <th class="extra">DM: Cust Req</th><th class="extra">DM: Theme</th><th class="extra">DM: Spatial</th><th class="extra">DM: Render</th><th class="extra">DM: Variants</th>
+              <th class="extra">Reason</th>
+            </tr></thead>
+            <tbody id="rows-body"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+<script>
+(function(){
+  // Change this if your Pulse project page base differs.
+  var PURL = "https://app.bonito.in/projects";
+  var API = "/api/cdp";
+  var PARAMS = [["rgm_notes","RGM/DCM Notes"],["rgm_rec","RGM Recording"],["cdp_notes","CDP Notes"],["cdp_rec","CDP Recording"],["cdd_form","CDD Form"],["cdp_pdf","CDP PDF"],["dm_review","DM Review"]];
+
+  var ALL = [];
+  var selEC=new Set(), selDM=new Set(), selST=new Set();
+  var searchRows = null;
+  var charts = {};
+  var MON=["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+
+  // ---- normalize a server row to the shape the UI expects ----
+  function normalize(r){
+    return { pid:String(r.project_no||''), cx:r.cx_name||'', branch:r.branch||'', designer:r.designer||'', dm:r.design_manager||'',
+      cdp_date:r.cdp_date||'', net_pct:r.net_pct||0, net_band:r.net_band||'red', status:r.project_status||'',
+      gross:r.gross_budget||'', cdp_budget:r.cdp_budget||'', pdf_ok:!!r.cdp_pdf_ok, pdf_name:r.cdp_pdf_filename||'', reason:r.net_reason||'',
+      dm_scores:r.dm_scores||{},
+      checks:{ rgm_notes:r.rgm_notes_ok?1:0, rgm_rec:r.rgm_recording_ok?1:0, cdp_notes:r.cdp_notes_ok?1:0, cdp_rec:r.cdp_recording_ok?1:0, cdd_form:r.cdd_form_ok?1:0, cdp_pdf:r.cdp_pdf_ok?1:0, dm_review:r.dm_review_ok?1:0 } };
+  }
+
+  // ---- helpers ----
+  function col(v){ return v>=75?'#0f7a4d': v>=50?'#c07a1a':'#b23b3b'; }
+  function avg(a){ return a.length? Math.round(a.reduce(function(x,y){return x+y;},0)/a.length):0; }
+  function uniq(arr){ return Array.from(new Set(arr.filter(Boolean))).sort(); }
+  function esc(s){ return String(s==null?'':s).replace(/[&<>"]/g,function(c){return{'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c];}); }
+
+  function filtered(){
+    return ALL.filter(function(r){
+      if (selEC.size && !selEC.has(r.branch)) return false;
+      if (selDM.size && !selDM.has(r.dm)) return false;
+      if (selST.size && !selST.has(r.status)) return false;
+      return true;
+    });
+  }
+
+  // ---- multi-select menus ----
+  function buildMenu(menuId, values, sel, onchange){
+    var m = document.getElementById(menuId);
+    m.innerHTML = values.map(function(v){
+      return '<label><input type="checkbox" value="'+esc(v)+'">'+ (esc(v)||'(none)') +'</label>';
+    }).join('');
+    m.querySelectorAll('input').forEach(function(cb){
+      cb.addEventListener('change', function(){
+        if (cb.checked) sel.add(cb.value); else sel.delete(cb.value);
+        onchange();
+      });
+    });
+  }
+  window.cdpToggleMenu = function(id){
+    var el = document.getElementById(id);
+    document.querySelectorAll('#cdp-exec .ms').forEach(function(m){ if(m!==el) m.classList.remove('open'); });
+    el.classList.toggle('open');
+  };
+  document.addEventListener('click', function(e){
+    if (!e.target.closest('.ms')) document.querySelectorAll('#cdp-exec .ms').forEach(function(m){ m.classList.remove('open'); });
+  });
+
+  function refreshCounts(){
+    document.getElementById('ec-cnt').textContent = selEC.size? selEC.size : 'All';
+    document.getElementById('dm-cnt').textContent = selDM.size? selDM.size : 'All';
+    document.getElementById('st-cnt').textContent = selST.size? selST.size : 'All';
+  }
+
+  // ---- OVERVIEW render ----
+  function renderOverview(){
+    var rows = filtered();
+    document.getElementById('k-total').textContent = rows.length;
+    document.getElementById('k-total-foot').textContent = uniq(rows.map(function(r){return r.branch;})).length + ' Experience Centres';
+    var a = avg(rows.map(function(r){return r.net_pct;}));
+    document.getElementById('k-avg').innerHTML = a + '<span style="font-size:17px;color:var(--muted)">%</span>';
+    var full = rows.filter(function(r){return r.net_pct===100;}).length;
+    document.getElementById('k-full').innerHTML = full + '<span style="font-size:17px;color:var(--muted)">/'+rows.length+'</span>';
+    document.getElementById('k-full-foot').textContent = rows.length? Math.round(full*100/rows.length)+'% hit all seven checks':'';
+    var pv = PARAMS.map(function(p){ var k=p[0]; return [p[1], rows.length? Math.round(rows.reduce(function(s,r){return s+r.checks[k];},0)*100/rows.length):0]; });
+    pv.sort(function(x,y){return x[1]-y[1];});
+    if (pv.length){ document.getElementById('k-low').textContent = pv[0][0]; document.getElementById('k-low-foot').textContent = pv[0][1]+'% pass rate \u00b7 needs action'; }
+
+    Chart.defaults.font.family="'Inter',sans-serif"; Chart.defaults.font.size=11.5; Chart.defaults.color='#7d928d';
+    Object.values(charts).forEach(function(c){ try{c.destroy();}catch(e){} });
+
+    var ecm={}; rows.forEach(function(r){ (ecm[r.branch]=ecm[r.branch]||[]).push(r.net_pct); });
+    var ecL=Object.keys(ecm).sort(), ecV=ecL.map(function(k){return avg(ecm[k]);});
+    charts.ec=new Chart(document.getElementById('c-ec'),{type:'bar',
+      data:{labels:ecL,datasets:[{data:ecV,backgroundColor:ecV.map(col),borderRadius:{topLeft:5,topRight:5},barPercentage:.6}]},
+      options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false},tooltip:{callbacks:{label:function(c){return c.parsed.y+'% compliant';}}}},
+        scales:{y:{beginAtZero:true,max:100,grid:{color:'#eef3f1'},border:{display:false},ticks:{stepSize:25,callback:function(v){return v+'%';}}},x:{grid:{display:false},border:{display:false},ticks:{font:{weight:'600',size:12}}}}}});
+
+    charts.param=new Chart(document.getElementById('c-param'),{type:'bar',
+      data:{labels:PARAMS.map(function(p){return p[1];}),datasets:[{data:PARAMS.map(function(p){var k=p[0];return rows.length?Math.round(rows.reduce(function(s,r){return s+r.checks[k];},0)*100/rows.length):0;}),backgroundColor:PARAMS.map(function(p){var k=p[0];var v=rows.length?Math.round(rows.reduce(function(s,r){return s+r.checks[k];},0)*100/rows.length):0;return col(v);}),borderRadius:4,barPercentage:.72}]},
+      options:{indexAxis:'y',responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false},tooltip:{callbacks:{label:function(c){return c.parsed.x+'% pass';}}}},
+        scales:{x:{beginAtZero:true,max:100,grid:{color:'#eef3f1'},border:{display:false},ticks:{stepSize:25,callback:function(v){return v+'%';}}},y:{grid:{display:false},border:{display:false}}}}});
+
+    var dmm={}; rows.forEach(function(r){ if(r.dm) (dmm[r.dm]=dmm[r.dm]||[]).push(r.net_pct); });
+    var dm=Object.keys(dmm).map(function(k){return [k,avg(dmm[k])];}).sort(function(x,y){return y[1]-x[1];});
+    document.getElementById('dm-rank').innerHTML = dm.length? dm.map(function(p){
+      return '<div class="rrow"><div class="nm">'+esc(p[0])+'</div><div class="bar"><span style="width:'+p[1]+'%;background:'+col(p[1])+'"></span></div><div class="pc">'+p[1]+'%</div></div>';
+    }).join('') : '<div style="color:var(--muted);font-size:12.5px">No DM data in selection</div>';
+
+    function weekStart(d){
+      if(!d) return null;
+      var dt=new Date(d.replace(' ','T')); if(isNaN(dt)) return null;
+      var day=(dt.getDay()+6)%7;
+      return new Date(dt.getFullYear(),dt.getMonth(),dt.getDate()-day);
+    }
+    function wkKey(d){ var m=weekStart(d); return m? m.getTime():null; }
+    function wkLabel(ts){ var m=new Date(ts); return m.getDate()+' '+MON[m.getMonth()]; }
+    var tm={}; rows.forEach(function(r){ var k=wkKey(r.cdp_date); if(k)(tm[k]=tm[k]||[]).push(r.net_pct); });
+    var tKeys=Object.keys(tm).map(Number).sort(function(a,b){return a-b;});
+    var tL=tKeys.map(wkLabel), tV=tKeys.map(function(k){return avg(tm[k]);});
+    var tc=document.getElementById('c-trend');
+    if (tL.length>=2){
+      charts.trend=new Chart(tc,{type:'line',data:{labels:tL,datasets:[{data:tV,borderColor:'#0b6b5f',backgroundColor:'rgba(11,107,95,.08)',fill:true,tension:.35,pointRadius:3,pointBackgroundColor:'#0b6b5f',borderWidth:2}]},
+        options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{y:{beginAtZero:true,max:100,grid:{color:'#eef3f1'},border:{display:false},ticks:{stepSize:25,callback:function(v){return v+'%';}}},x:{grid:{display:false},border:{display:false}}}}});
+    } else {
+      var ctx=tc.getContext('2d'); ctx.clearRect(0,0,tc.width,tc.height); ctx.font="13px Inter"; ctx.fillStyle="#7d928d"; ctx.textAlign="center"; ctx.fillText("Widen the date range to see the weekly trend", (tc.width||300)/2, 110);
+    }
+  }
+
+  // ---- DETAILED render ----
+  function ynCell(v){ return v ? '<span class="yn-yes">Yes</span>' : '<span class="yn-no">No</span>'; }
+  function checkCell(ok, pid){
+    var url = PURL + '/' + encodeURIComponent(pid);
+    var cls = ok ? 'tick' : 'cross';
+    var sym = ok ? '\u2713' : '\u2717';
+    return '<a class="'+cls+'" href="'+url+'" target="_blank" title="Open project '+esc(pid)+'">'+sym+'</a>';
+  }
+  function rowHtml(r){
+    var d=r.dm_scores||{};
+    // PDF: no OCR on Netlify. Present -> link out to the Pulse project page; else "None".
+    var pdf = r.checks.cdp_pdf
+      ? '<a class="pdf-link" href="'+PURL+'/'+encodeURIComponent(r.pid)+'" target="_blank" title="'+esc(r.pdf_name||'CDP PDF')+'">Present</a>'
+      : '<span class="yn-no">None</span>';
+    return '<tr>'+
+      '<td class="sticky">'+esc(r.pid)+'</td>'+
+      '<td>'+esc(r.cx)+'</td><td>'+esc(r.branch)+'</td><td><span class="pill">'+esc(r.status)+'</span></td><td>'+esc(r.designer)+'</td><td>'+(esc(r.cdp_date)||'\u2014')+'</td>'+
+      '<td>'+(esc(r.gross)||'\u2014')+'</td><td>'+(esc(r.cdp_budget)||'\u2014')+'</td>'+
+      '<td class="cc">'+checkCell(r.checks.rgm_notes,r.pid)+'</td>'+
+      '<td class="cc">'+checkCell(r.checks.rgm_rec,r.pid)+'</td>'+
+      '<td class="cc">'+checkCell(r.checks.cdp_notes,r.pid)+'</td>'+
+      '<td class="cc">'+checkCell(r.checks.cdp_rec,r.pid)+'</td>'+
+      '<td class="cc">'+checkCell(r.checks.cdd_form,r.pid)+'</td>'+
+      '<td class="cc">'+pdf+'</td>'+
+      '<td class="cc">'+ynCell(r.checks.dm_review)+'</td>'+
+      '<td class="net net-'+r.net_band+'">'+r.net_pct+'%</td>'+
+      '<td class="extra">'+esc(r.dm)+'</td>'+
+      '<td class="extra">'+(esc(d.customer_requirement)||'\u2014')+'</td><td class="extra">'+(esc(d.theme)||'\u2014')+'</td><td class="extra">'+(esc(d.spatial_planning)||'\u2014')+'</td><td class="extra">'+(esc(d.render)||'\u2014')+'</td><td class="extra">'+(esc(d.quotation_variants)||'\u2014')+'</td>'+
+      '<td class="extra" style="white-space:normal;max-width:220px;font-size:11px">'+(esc(r.reason)||'\u2014')+'</td>'+
+    '</tr>';
+  }
+  function renderDetailed(){
+    var rows = searchRows !== null ? searchRows : filtered();
+    document.getElementById('rows-body').innerHTML = rows.length ? rows.map(rowHtml).join('') : '<tr><td colspan="23" class="empty">No projects match.</td></tr>';
+    document.getElementById('d-count').textContent = rows.length;
+    document.getElementById('search-note').innerHTML = searchRows!==null ? '&middot; universal search (all dates)' : '';
+  }
+
+  // ---- universal PID search ----
+  document.getElementById('uni-go').addEventListener('click', doSearch);
+  document.getElementById('uni-search').addEventListener('keydown', function(e){ if(e.key==='Enter'){ e.preventDefault(); doSearch(); } });
+  document.getElementById('uni-clear').addEventListener('click', function(){ document.getElementById('uni-search').value=''; searchRows=null; renderDetailed(); });
+  function doSearch(){
+    var q=document.getElementById('uni-search').value.trim(); if(!q) return;
+    var body=document.getElementById('rows-body'); body.innerHTML='<tr><td colspan="23" style="padding:24px;text-align:center;color:var(--muted)">Searching\u2026</td></tr>';
+    fetch(API+'?pid='+encodeURIComponent(q))
+      .then(function(r){return r.json();})
+      .then(function(d){
+        if(!d.rows || !d.rows.length){ body.innerHTML='<tr><td colspan="23" style="padding:24px;text-align:center;color:var(--muted)">No matching PIDs found</td></tr>'; searchRows=[]; document.getElementById('d-count').textContent=0; return; }
+        searchRows = d.rows.map(normalize);
+        renderDetailed();
+      })
+      .catch(function(){ body.innerHTML='<tr><td colspan="23" style="padding:24px;text-align:center;color:var(--bad)">Search failed</td></tr>'; });
+  }
+
+  // ---- DM columns toggle ----
+  document.getElementById('toggle-dm').addEventListener('click', function(){
+    var root=document.getElementById('cdp-exec'); var on=root.classList.toggle('show-dm');
+    this.textContent = on ? '\u2212 Hide DM scores & details' : '+ Show DM scores & details';
+  });
+
+  // ---- CSV export (client-side, from whatever rows are in view) ----
+  document.getElementById('csv-link').addEventListener('click', function(){
+    var rows = searchRows !== null ? searchRows : filtered();
+    var head = ["PID","CX Name","Branch","Status","Designer","Design Manager","CDP Date","Gross Budget","CDP Budget",
+      "RGM/DCM Notes","RGM Recording","CDP Notes","CDP Recording","CDD Form","CDP PDF","DM Review",
+      "DM:CustReq","DM:Theme","DM:Spatial","DM:Render","DM:Variants","NET %","Missing"];
+    function yn(v){return v?"Yes":"No";}
+    function q(v){ v=String(v==null?'':v); return /[",\n]/.test(v)?'"'+v.replace(/"/g,'""')+'"':v; }
+    var lines=[head.join(",")];
+    rows.forEach(function(r){ var d=r.dm_scores||{};
+      lines.push([r.pid,r.cx,r.branch,r.status,r.designer,r.dm,r.cdp_date,r.gross,r.cdp_budget,
+        yn(r.checks.rgm_notes),yn(r.checks.rgm_rec),yn(r.checks.cdp_notes),yn(r.checks.cdp_rec),yn(r.checks.cdd_form),yn(r.checks.cdp_pdf),yn(r.checks.dm_review),
+        d.customer_requirement,d.theme,d.spatial_planning,d.render,d.quotation_variants,r.net_pct+'%',r.reason].map(q).join(","));
+    });
+    var blob=new Blob([lines.join("\n")],{type:"text/csv"});
+    var a=document.createElement("a"); a.href=URL.createObjectURL(blob);
+    a.download="cdp_compliance_"+(new Date().toISOString().slice(0,10))+".csv"; a.click();
+  });
+
+  // ---- view switch ----
+  window.cdpView=function(v){
+    var root=document.getElementById('cdp-exec');
+    var to=document.getElementById('tab-o'), td=document.getElementById('tab-d');
+    if(v==='detailed'){ root.classList.add('show-detailed'); td.classList.add('active'); to.classList.remove('active'); renderDetailed(); }
+    else { root.classList.remove('show-detailed'); to.classList.add('active'); td.classList.remove('active'); setTimeout(renderOverview,30); }
+  };
+
+  // ---- filter change ----
+  function onFilterChange(){ refreshCounts(); renderOverview(); if(searchRows===null) renderDetailed(); document.getElementById('hdr-count').textContent=filtered().length; }
+
+  // ---- data load ----
+  function fmtPretty(from,to){
+    function p(d){ var x=new Date(d); return x.getDate()+' '+MON[x.getMonth()]; }
+    return p(from)+' \u2013 '+p(to)+' '+new Date(to).getFullYear();
+  }
+  function defaultDates(){
+    var to=new Date(); var from=new Date(to.getTime()-30*864e5);
+    return [from.toISOString().slice(0,10), to.toISOString().slice(0,10)];
+  }
+  function load(){
+    var from=document.getElementById('f-from').value, to=document.getElementById('f-to').value;
+    var mc=document.getElementById('f-minchars').value||100;
+    document.getElementById('notice-slot').innerHTML='';
+    document.getElementById('rows-body').innerHTML='<tr><td colspan="23" class="loading">Loading\u2026</td></tr>';
+    var url=API+'?from='+from+'&to='+to+'&min_chars='+encodeURIComponent(mc);
+    fetch(url).then(function(r){return r.json();}).then(function(d){
+      if(d.error){ document.getElementById('notice-slot').innerHTML='<div class="notice">Error loading data: '+esc(d.error)+'</div>'; return; }
+      if(d.too_many){ document.getElementById('notice-slot').innerHTML='<div class="notice">Found <strong>'+d.summary.total_found+'</strong> projects. Narrow the date range or filters to load the dashboard.</div>'; ALL=[]; }
+      else { ALL=(d.rows||[]).map(normalize); }
+      searchRows=null;
+      selEC.clear(); selDM.clear(); selST.clear();
+      buildMenu('ec-menu', d.available_branches||uniq(ALL.map(function(r){return r.branch;})), selEC, onFilterChange);
+      buildMenu('dm-menu', uniq(ALL.map(function(r){return r.dm;})), selDM, onFilterChange);
+      buildMenu('st-menu', d.available_statuses||uniq(ALL.map(function(r){return r.status;})), selST, onFilterChange);
+      refreshCounts();
+      document.getElementById('hdr-range').textContent = fmtPretty(d.from||from, d.to||to);
+      document.getElementById('hdr-count').textContent = ALL.length;
+      renderOverview(); renderDetailed();
+    }).catch(function(e){
+      document.getElementById('notice-slot').innerHTML='<div class="notice">Could not reach the data function. '+esc(e.message)+'</div>';
+    });
+  }
+
+  document.getElementById('btn-load').addEventListener('click', load);
+  document.getElementById('btn-reset').addEventListener('click', function(){
+    var dd=defaultDates(); document.getElementById('f-from').value=dd[0]; document.getElementById('f-to').value=dd[1];
+    document.getElementById('f-minchars').value=100; load();
+  });
+
+  // ---- init ----
+  var dd=defaultDates();
+  document.getElementById('f-from').value=dd[0];
+  document.getElementById('f-to').value=dd[1];
+  load();
+})();
+</script>
+</div>
+</body>
+</html>
