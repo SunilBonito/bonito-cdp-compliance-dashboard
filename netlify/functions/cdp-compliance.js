@@ -34,17 +34,19 @@ const MAX_PROJECTS = 500;
 const TURNKEY = 1; // Project.project_types[:turnkey]
 
 // --- S3 (CDP PDF presigning, mirrors ActiveStorage) ---
-const AWS_REGION = process.env.AWS_REGION || "us-west-2";
-const AWS_BUCKET = process.env.AWS_BUCKET || "bonito.app";
+// Netlify reserves AWS_* names, so we use BONITO_AWS_* (with AWS_* fallback for local).
+const AWS_REGION = process.env.BONITO_AWS_REGION || process.env.AWS_REGION || "us-west-2";
+const AWS_BUCKET = process.env.BONITO_AWS_BUCKET || process.env.AWS_BUCKET || "bonito.app";
 let s3client;
 function getS3() {
-  if (!s3client && process.env.AWS_ACCESS_KEY_ID && process.env.AWS_SECRET_ACCESS_KEY) {
+  // Netlify reserves AWS_ACCESS_KEY_ID / AWS_SECRET_ACCESS_KEY, so we read
+  // our own BONITO_AWS_* names (fall back to the standard ones for local dev).
+  const keyId = process.env.BONITO_AWS_KEY_ID || process.env.AWS_ACCESS_KEY_ID;
+  const secret = process.env.BONITO_AWS_SECRET || process.env.AWS_SECRET_ACCESS_KEY;
+  if (!s3client && keyId && secret) {
     s3client = new S3Client({
       region: AWS_REGION,
-      credentials: {
-        accessKeyId: process.env.AWS_ACCESS_KEY_ID,
-        secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY,
-      },
+      credentials: { accessKeyId: keyId, secretAccessKey: secret },
     });
   }
   return s3client;
