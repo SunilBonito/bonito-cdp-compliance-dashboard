@@ -15,10 +15,12 @@
 //   7. dm_review_ok      CDP_COMPLIANCE form filled with real DM scores  [NEW]
 //
 // Dropped vs Rails (needs binaries Netlify Functions can't run):
-//   - S3 presigned PDF URL  -> we link out to the Pulse project page instead
 //   - BOQ / page-count OCR   -> was on-demand only, not in the verdict
+// CDP PDF -> real S3 presigned URL (same as Rails), signed live per request.
 
 const { Pool } = require("pg");
+const { S3Client, GetObjectCommand } = require("@aws-sdk/client-s3");
+const { getSignedUrl } = require("@aws-sdk/s3-request-presigner");
 
 // ---- config (mirrors the Ruby constants) --------------------------------
 const CDP_TASK_CODE  = "prebook_design_presentation";
@@ -30,6 +32,45 @@ const CDP_COMPLIANCE_FORM_CODE = "CDP_COMPLIANCE";
 const DEFAULT_MIN_CHARS = 100;
 const MAX_PROJECTS = 500;
 const TURNKEY = 1; // Project.project_types[:turnkey]
+
+// --- S3 (CDP PDF presigning, mirrors ActiveStorage) ---
+const AWS_REGION = process.env.AWS_REGION || "us-west-2";
+const AWS_BUCKET = process.env.AWS_BUCKET || "bonito.app";
+let s3client;
+function getS3() {
+  if (!s3client && process.env.AWS_ACCESS_KEY_ID && process.env.AWS_SECRET_ACCESS_KEY) {
+    s3client = new S3Client({
+      region: AWS_REGION,
+      credentials: {
+        accessKeyId: process.env.AWS_ACCESS_KEY_ID,
+        secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY,
+      },
+    });
+  }
+  return s3client;
+}
+// Sign a 5-min GET url that opens the PDF inline with its real filename,
+// mirroring what ActiveStorage's service_url produces in Rails.
+async function presignPdf(key, filename) {
+  const c = getS3();
+  if (!c || !key) return null;
+  try {
+    const cmd = new GetObjectCommand({
+      Bucket: AWS_BUCKET,
+      Key: key,
+      ResponseContentType: "application/pdf",
+      ResponseContentDisposition: `inline; filename="${(filename || "cdp.pdf").replace(/"/g, "")}"`,
+    });
+    return await getSignedUrl(c, cmd, { expiresIn: 300 });
+  } catch (e) {
+    return null; // fall back to Pulse /drive on the frontend
+  }
+}
+
+// --- AI meeting insights (Pulse pipeline, live Aug 3 2026 onwards) ---
+const CDP_MEETING_TYPE = 10;
+const AI_CUTOFF = "2026-08-03";
+const AI_READY = "insights_ready";
 
 // DM scoring item ids from the CDP_COMPLIANCE form (reference only + dm_review)
 const DM_SCORE_ITEMS = {
@@ -196,7 +237,7 @@ exports.handler = async (event) => {
     const ids = projectIds;
 
     const [
-      projMeta, notes, cddForms, cdpForms, pdfFlags, statuses, props, cdpDates,
+      projMeta, notes, cddForms, cdpForms, pdfFlags, statuses, props, cdpDates, aiInsights,
     ] = await Promise.all([
       projectMeta(db, ids),
       notesByProject(db, ids),
@@ -206,7 +247,15 @@ exports.handler = async (event) => {
       projectStatuses(db, ids),
       propertyBudgets(db, ids),
       cdpCloseDates(db, ids),
+      aiInsightsByProject(db, ids),
     ]);
+
+    // 2b) presign CDP PDFs (parallel) so row assembly stays synchronous
+    const pdfUrls = {};
+    await Promise.all(ids.map(async (id) => {
+      const f = pdfFlags[id];
+      if (f && f.key) pdfUrls[id] = await presignPdf(f.key, f.filename);
+    }));
 
     // 3) assemble rows ----------------------------------------------------
     const rows = ids.map((id) => {
@@ -221,6 +270,14 @@ exports.handler = async (event) => {
 
       const cdpData = cdpForms[id];
 
+      // --- AI meeting insight (Pulse pipeline) ---
+      const ai = aiInsights[id] || {};
+      const cdpMeetingDate = ai.cdp_meeting_date || cdpDates[id] || "";
+      // The AI check only applies to CDP meetings on/after the rollout date.
+      // Before that, insights never existed, so the check is excluded entirely.
+      const aiApplies = cdpMeetingDate && cdpMeetingDate.slice(0, 10) >= AI_CUTOFF;
+      const aiCdpReady = !!ai.cdp_ready;
+
       const checks = {
         rgm_notes_ok:     cddFilled || rgmNotesContent,
         rgm_recording_ok: rgm.some((n) => n.rec),
@@ -230,6 +287,8 @@ exports.handler = async (event) => {
         cdp_pdf_ok:       !!pdfFlags[id],
         dm_review_ok:     dmReviewPassed(cdpData),
       };
+      // 8th check, only when the CDP meeting is in the AI era:
+      if (aiApplies) checks.ai_cdp_ok = aiCdpReady;
 
       const dmScores = {};
       if (cdpData) for (const [k, itemId] of Object.entries(DM_SCORE_ITEMS)) dmScores[k] = String(cdpData[itemId] ?? "");
@@ -253,7 +312,14 @@ exports.handler = async (event) => {
         cdp_budget: cdpBudget || "",
         cdp_pdf_ok: checks.cdp_pdf_ok,
         cdp_pdf_filename: pdfFlags[id]?.filename || null,
+        cdp_pdf_url: pdfUrls[id] || null,
         dm_scores: dmScores,
+        // AI insight surface (read-only, the tech team's pipeline output)
+        ai_applies: aiApplies,
+        ai_cdp_ready: aiCdpReady,
+        ai_summary: ai.summary || "",
+        ai_sentiment: ai.sentiment || "",
+        ai_meeting_date: cdpMeetingDate,
         ...checks,
       };
       computeOverall(row);
@@ -294,16 +360,20 @@ const SCORE_CHECKS = [
   ["cdp_pdf_ok", "CDP presentation"],
   ["dm_review_ok", "DM review"],
 ];
+const AI_CHECK = ["ai_cdp_ok", "AI insight (CDP)"];
 
 function computeOverall(row) {
-  const passed = SCORE_CHECKS.filter(([k]) => row[k]).length;
-  const total = SCORE_CHECKS.length;
+  // Flex denominator: the AI check only joins the scoring for CDP meetings
+  // in the AI era (Aug 3 2026+). Pre-era rows keep the original 7-check total.
+  const checks = row.ai_applies ? SCORE_CHECKS.concat([AI_CHECK]) : SCORE_CHECKS;
+  const passed = checks.filter(([k]) => row[k]).length;
+  const total = checks.length;
   const pct = Math.round((passed * 100) / total);
   row.net_passed = passed;
   row.net_total = total;
   row.net_pct = pct;
   row.net_band = pct === 100 ? "green" : pct >= 67 ? "amber" : "red";
-  row.net_reason = SCORE_CHECKS.filter(([k]) => !row[k]).map(([, l]) => l).join(", ");
+  row.net_reason = checks.filter(([k]) => !row[k]).map(([, l]) => l).join(", ");
 }
 
 function buildSummary(rows) {
@@ -412,7 +482,7 @@ async function formResponses(db, ids, formCode) {
 // PDF present in any folder owned by the project's CDP task
 async function cdpPdfPresence(db, ids) {
   const r = await db.query(
-    `SELECT DISTINCT ON (tl.listable_id) tl.listable_id AS pid, b.filename
+    `SELECT DISTINCT ON (tl.listable_id) tl.listable_id AS pid, b.filename, b.key
      FROM tasks t
      JOIN tasklists tl ON tl.id = t.tasklist_id
        AND tl.listable_type = 'Project' AND tl.listable_id = ANY($1::bigint[])
@@ -424,7 +494,7 @@ async function cdpPdfPresence(db, ids) {
     [ids, CDP_TASK_CODE]
   );
   const out = {};
-  for (const x of r.rows) out[x.pid] = { filename: x.filename };
+  for (const x of r.rows) out[x.pid] = { filename: x.filename, key: x.key };
   return out;
 }
 
@@ -477,4 +547,49 @@ async function cdpCloseDates(db, ids) {
     }
   }
   return out;
+}
+
+// AI meeting insights for the CDP meeting (Pulse pipeline).
+// meetings.meeting_type = 10, attached to the Project; latest ready insight wins.
+// sentiment lives in insights_json->>'client_sentiment' (Positive/Mixed/Negative).
+async function aiInsightsByProject(db, ids) {
+  const r = await db.query(
+    `SELECT DISTINCT ON (m.meetable_id)
+            m.meetable_id AS pid,
+            m.start_date  AS cdp_meeting_date,
+            mi.status     AS insight_status,
+            mi.insights_json->>'summary'          AS summary,
+            mi.insights_json->>'client_sentiment' AS sentiment
+     FROM meetings m
+     LEFT JOIN meeting_insights mi ON mi.meeting_id = m.id
+     WHERE m.meeting_type = $2
+       AND m.meetable_type = 'Project'
+       AND m.meetable_id = ANY($1::bigint[])
+     ORDER BY m.meetable_id,
+              (mi.status = '${AI_READY}') DESC NULLS LAST,
+              m.start_date DESC`,
+    [ids, CDP_MEETING_TYPE]
+  );
+  const out = {};
+  for (const x of r.rows) {
+    const ready = x.insight_status === AI_READY;
+    out[x.pid] = {
+      cdp_ready: ready,
+      summary: ready ? (x.summary || "") : "",
+      sentiment: ready ? normSentiment(x.sentiment) : "",
+      cdp_meeting_date: x.cdp_meeting_date
+        ? new Date(x.cdp_meeting_date).toISOString().slice(0, 16).replace("T", " ")
+        : "",
+    };
+  }
+  return out;
+}
+
+function normSentiment(s) {
+  if (!s) return "";
+  const v = String(s).toLowerCase();
+  if (v.includes("posit")) return "Positive";
+  if (v.includes("negat")) return "Negative";
+  if (v.includes("mix") || v.includes("neutral")) return "Mixed";
+  return String(s).slice(0, 12);
 }
