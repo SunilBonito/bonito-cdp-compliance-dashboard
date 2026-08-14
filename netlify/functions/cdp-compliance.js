@@ -16,11 +16,9 @@
 //
 // Dropped vs Rails (needs binaries Netlify Functions can't run):
 //   - BOQ / page-count OCR   -> was on-demand only, not in the verdict
-// CDP PDF -> real S3 presigned URL (same as Rails), signed live per request.
+// CDP PDF -> link to Pulse /drive (no S3 signing; simpler and never expires).
 
 const { Pool } = require("pg");
-const { S3Client, GetObjectCommand } = require("@aws-sdk/client-s3");
-const { getSignedUrl } = require("@aws-sdk/s3-request-presigner");
 
 // ---- config (mirrors the Ruby constants) --------------------------------
 const CDP_TASK_CODE  = "prebook_design_presentation";
@@ -33,46 +31,19 @@ const DEFAULT_MIN_CHARS = 100;
 const MAX_PROJECTS = 500;
 const TURNKEY = 1; // Project.project_types[:turnkey]
 
-// --- S3 (CDP PDF presigning, mirrors ActiveStorage) ---
-// Netlify reserves AWS_* names, so we use BONITO_AWS_* (with AWS_* fallback for local).
-const AWS_REGION = process.env.BONITO_AWS_REGION || process.env.AWS_REGION || "us-west-2";
-const AWS_BUCKET = process.env.BONITO_AWS_BUCKET || process.env.AWS_BUCKET || "bonito.app";
-let s3client;
-function getS3() {
-  // Netlify reserves AWS_ACCESS_KEY_ID / AWS_SECRET_ACCESS_KEY, so we read
-  // our own BONITO_AWS_* names (fall back to the standard ones for local dev).
-  const keyId = process.env.BONITO_AWS_KEY_ID || process.env.AWS_ACCESS_KEY_ID;
-  const secret = process.env.BONITO_AWS_SECRET || process.env.AWS_SECRET_ACCESS_KEY;
-  if (!s3client && keyId && secret) {
-    s3client = new S3Client({
-      region: AWS_REGION,
-      credentials: { accessKeyId: keyId, secretAccessKey: secret },
-    });
-  }
-  return s3client;
-}
-// Sign a 5-min GET url that opens the PDF inline with its real filename,
-// mirroring what ActiveStorage's service_url produces in Rails.
-async function presignPdf(key, filename) {
-  const c = getS3();
-  if (!c || !key) return null;
-  try {
-    const cmd = new GetObjectCommand({
-      Bucket: AWS_BUCKET,
-      Key: key,
-      ResponseContentType: "application/pdf",
-      ResponseContentDisposition: `inline; filename="${(filename || "cdp.pdf").replace(/"/g, "")}"`,
-    });
-    return await getSignedUrl(c, cmd, { expiresIn: 300 });
-  } catch (e) {
-    return null; // fall back to Pulse /drive on the frontend
-  }
-}
-
 // --- AI meeting insights (Pulse pipeline, live Aug 3 2026 onwards) ---
 const CDP_MEETING_TYPE = 10;
 const AI_CUTOFF = "2026-08-03";
 const AI_READY = "insights_ready";
+
+// --- DEM (design execution) milestones — Milestone-DM phase, scored separately ---
+// DEM-1 = design_discussion2, DEM-2 = design_discussion3, DEM-3 = design_discussion4.
+// "Done" = the task's close_date is set. No AI insights for DEM yet.
+const DEM_TASKS = [
+  ["dem1_ok", "design_discussion2", "DEM-1"],
+  ["dem2_ok", "design_discussion3", "DEM-2"],
+  ["dem3_ok", "design_discussion4", "DEM-3"],
+];
 
 // DM scoring item ids from the CDP_COMPLIANCE form (reference only + dm_review)
 const DM_SCORE_ITEMS = {
@@ -239,7 +210,7 @@ exports.handler = async (event) => {
     const ids = projectIds;
 
     const [
-      projMeta, notes, cddForms, cdpForms, pdfFlags, statuses, props, cdpDates, aiInsights,
+      projMeta, notes, cddForms, cdpForms, pdfFlags, statuses, props, cdpDates, aiInsights, demStatus,
     ] = await Promise.all([
       projectMeta(db, ids),
       notesByProject(db, ids),
@@ -250,14 +221,8 @@ exports.handler = async (event) => {
       propertyBudgets(db, ids),
       cdpCloseDates(db, ids),
       aiInsightsByProject(db, ids),
+      demByProject(db, ids),
     ]);
-
-    // 2b) presign CDP PDFs (parallel) so row assembly stays synchronous
-    const pdfUrls = {};
-    await Promise.all(ids.map(async (id) => {
-      const f = pdfFlags[id];
-      if (f && f.key) pdfUrls[id] = await presignPdf(f.key, f.filename);
-    }));
 
     // 3) assemble rows ----------------------------------------------------
     const rows = ids.map((id) => {
@@ -266,25 +231,27 @@ exports.handler = async (event) => {
       const rgm = nList.filter((n) => /^(DCM|RGM)/i.test(n.subject));
       const cdp = nList.filter((n) => /^CDP/i.test(n.subject));
 
-      const cddData = cddForms[id];
+      const cddEntry = cddForms[id];
+      const cddData = cddEntry ? cddEntry.data : null;
       const cddFilled = cddData ? formFilled(cddData) : false;
       const rgmNotesContent = rgm.some((n) => n.text_len >= minChars);
 
-      const cdpData = cdpForms[id];
+      const cdpEntry = cdpForms[id];
+      const cdpData = cdpEntry ? cdpEntry.data : null;
 
       // --- AI meeting insight (Pulse pipeline) ---
       const ai = aiInsights[id] || {};
       const cdpMeetingDate = ai.cdp_meeting_date || cdpDates[id] || "";
-      // The AI check only applies to CDP meetings on/after the rollout date.
-      // Before that, insights never existed, so the check is excluded entirely.
       const aiApplies = cdpMeetingDate && cdpMeetingDate.slice(0, 10) >= AI_CUTOFF;
       const aiCdpReady = !!ai.cdp_ready;
 
       const checks = {
         rgm_notes_ok:     cddFilled || rgmNotesContent,
         rgm_recording_ok: rgm.some((n) => n.rec),
-        cdp_notes_ok:     cdp.some((n) => n.text_len >= minChars),
-        cdp_recording_ok: cdp.some((n) => n.rec),
+        // A ready AI insight proves the CDP meeting was recorded + transcribed,
+        // so it satisfies both CDP notes and CDP recording.
+        cdp_notes_ok:     aiCdpReady || cdp.some((n) => n.text_len >= minChars),
+        cdp_recording_ok: aiCdpReady || cdp.some((n) => n.rec),
         cdd_form_ok:      cddFilled,
         cdp_pdf_ok:       !!pdfFlags[id],
         dm_review_ok:     dmReviewPassed(cdpData),
@@ -301,6 +268,13 @@ exports.handler = async (event) => {
         if (v && parseFloat(v) > 0) cdpBudget = `${v}L`;
       }
 
+      // DEM milestones (separate phase, scored apart from CDP NET)
+      const dem = demStatus[id] || {};
+      const dem1 = !!dem.dem1_ok, dem2 = !!dem.dem2_ok, dem3 = !!dem.dem3_ok;
+      const demPassed = [dem1, dem2, dem3].filter(Boolean).length;
+      const demPct = Math.round((demPassed * 100) / 3);
+      const demBand = demPct === 100 ? "green" : demPct >= 34 ? "amber" : "red";
+
       const row = {
         project_id: id,
         project_no: String(meta.project_no ?? ""),
@@ -308,14 +282,21 @@ exports.handler = async (event) => {
         branch: meta.branch || "",
         designer: meta.designer || "",
         design_manager: meta.design_manager || "",
+        ms_designer: meta.ms_designer || "",
+        ms_design_manager: meta.ms_design_manager || "",
         cdp_date: cdpDates[id] || "",
         project_status: statuses[id] || "Unknown",
         gross_budget: props[id] || "",
         cdp_budget: cdpBudget || "",
         cdp_pdf_ok: checks.cdp_pdf_ok,
         cdp_pdf_filename: pdfFlags[id]?.filename || null,
-        cdp_pdf_url: pdfUrls[id] || null,
+        cdd_rid: cddEntry ? cddEntry.rid : null,
+        dmr_rid: cdpEntry ? cdpEntry.rid : null,
         dm_scores: dmScores,
+        // DEM (separate score)
+        dem1_ok: dem1, dem2_ok: dem2, dem3_ok: dem3,
+        dem_dates: dem.dem_dates || {},
+        dem_passed: demPassed, dem_pct: demPct, dem_band: demBand,
         // AI insight surface (read-only, the tech team's pipeline output)
         ai_applies: aiApplies,
         ai_cdp_ready: aiCdpReady,
@@ -434,9 +415,11 @@ async function projectMeta(db, ids) {
       project_no: x.project_no,
       cx_name: x.cx_name,
       branch: x.branch,
-      designer: x.net_designer || x.designer || "",
-      // CDP is the Net phase, so prefer the Net Design Manager for this view.
-      design_manager: x.net_design_manager || x.design_manager || "",
+      designer: x.net_designer || x.designer || "",          // CDP-view designer
+      // CDP-view DM: Net DM only. "Unassigned" when none (real signal, no fallback).
+      design_manager: x.net_design_manager || "Unassigned",
+      ms_designer: x.designer || "",                          // Milestone-view designer
+      ms_design_manager: x.design_manager || "",              // Milestone-view DM
     };
   }
   return out;
@@ -462,7 +445,7 @@ async function notesByProject(db, ids) {
 // latest response.data per project for a given form code
 async function formResponses(db, ids, formCode) {
   const r = await db.query(
-    `SELECT DISTINCT ON (sf.form_sendable_id) sf.form_sendable_id AS pid, resp.data
+    `SELECT DISTINCT ON (sf.form_sendable_id) sf.form_sendable_id AS pid, resp.id AS rid, resp.data
      FROM form_wizard_sent_forms sf
      JOIN form_wizard_forms f ON f.id = sf.form_id
      JOIN form_wizard_responses resp ON resp.form_wizard_sent_form_id = sf.id
@@ -476,7 +459,7 @@ async function formResponses(db, ids, formCode) {
   for (const x of r.rows) {
     let data = {};
     try { data = typeof x.data === "string" ? JSON.parse(x.data) : x.data || {}; } catch { data = {}; }
-    out[x.pid] = data;
+    out[x.pid] = { data, rid: x.rid };
   }
   return out;
 }
@@ -551,7 +534,34 @@ async function cdpCloseDates(db, ids) {
   return out;
 }
 
-// AI meeting insights for the CDP meeting (Pulse pipeline).
+// DEM milestone completion: which of the three DEM agenda tasks are closed.
+async function demByProject(db, ids) {
+  const codes = DEM_TASKS.map(([, code]) => code);
+  const r = await db.query(
+    `SELECT tl.listable_id AS pid, t.code, t.close_date
+     FROM tasks t
+     JOIN tasklists tl ON tl.id = t.tasklist_id
+       AND tl.listable_type = 'Project' AND tl.listable_id = ANY($1::bigint[])
+     WHERE t.code = ANY($2::text[])`,
+    [ids, codes]
+  );
+  const byPid = {};
+  for (const x of r.rows) {
+    (byPid[x.pid] = byPid[x.pid] || {})[x.code] = x.close_date;
+  }
+  const out = {};
+  for (const pid of Object.keys(byPid)) {
+    const closed = byPid[pid];
+    const o = { dem_dates: {} };
+    for (const [key, code, label] of DEM_TASKS) {
+      const cd = closed[code];
+      o[key] = !!cd;
+      o.dem_dates[label] = cd ? new Date(cd).toISOString().slice(0, 10) : "";
+    }
+    out[pid] = o;
+  }
+  return out;
+}
 // meetings.meeting_type = 10, attached to the Project; latest ready insight wins.
 // sentiment lives in insights_json->>'client_sentiment' (Positive/Mixed/Negative).
 async function aiInsightsByProject(db, ids) {
