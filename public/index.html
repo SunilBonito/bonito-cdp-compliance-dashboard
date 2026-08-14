@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>CDP Compliance — Executive View</title>
+<title>CDP Compliance - Executive View</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Instrument+Serif&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
@@ -50,6 +50,24 @@
   #cdp-exec .grid{ display:grid; grid-template-columns:1.15fr .85fr; gap:18px; margin-bottom:18px; }
   #cdp-exec .grid.eq{ grid-template-columns:1fr 1fr; }
   @media (max-width:1000px){ #cdp-exec .grid,#cdp-exec .grid.eq{ grid-template-columns:1fr; } #cdp-exec .kpis{ grid-template-columns:repeat(2,1fr); } }
+  @media (max-width:640px){
+    #cdp-exec{ padding:16px 12px 50px; }
+    #cdp-exec .h1{ font-size:26px; }
+    #cdp-exec .top{ flex-direction:column; align-items:flex-start; gap:14px; }
+    #cdp-exec .filterbar{ flex-direction:column; align-items:stretch; gap:10px; }
+    #cdp-exec .filterbar .fg{ width:100%; }
+    #cdp-exec .filterbar input[type=date], #cdp-exec .filterbar input[type=number], #cdp-exec .ms, #cdp-exec .ms-btn{ width:100%; }
+    #cdp-exec .kpis{ grid-template-columns:1fr 1fr; }
+    #cdp-exec .kpi .val{ font-size:24px; }
+    #cdp-exec .actionbar{ flex-direction:column; align-items:stretch; }
+    #cdp-exec .search-uni{ flex-direction:column; align-items:stretch; }
+    #cdp-exec .search-uni input{ min-width:0; width:100%; }
+    #cdp-exec .tbl-scroll{ max-height:none; }
+    #cdp-exec table.ct{ font-size:11px; }
+    #cdp-exec table.ct th, #cdp-exec table.ct td{ padding:6px 5px; }
+    #cdp-exec .ai-modal{ max-height:88vh; }
+    #cdp-exec .toggle button{ padding:7px 12px; font-size:12px; }
+  }
   #cdp-exec .panel{ background:var(--card); border:1px solid var(--line); border-radius:14px; padding:20px 22px; }
   #cdp-exec .panel h3{ font-size:14px; font-weight:600; margin:0 0 2px; }
   #cdp-exec .panel .psub{ font-size:11.5px; color:var(--muted); margin:0 0 16px; }
@@ -96,6 +114,13 @@
   #cdp-exec .empty{ padding:50px; text-align:center; color:var(--muted); font-size:14px; }
   #cdp-exec .notice{ background:#fdf6e3; border:1px solid #f0e0a8; color:#7a5c14; border-radius:10px; padding:13px 16px; margin-bottom:18px; font-size:13px; }
   #cdp-exec .loading{ padding:60px; text-align:center; color:var(--muted); font-size:14px; }
+  #cdp-exec .ai-overlay{ display:none; position:fixed; inset:0; background:rgba(18,33,31,.45); z-index:200; align-items:center; justify-content:center; padding:24px; }
+  #cdp-exec .ai-modal{ background:#fff; border-radius:14px; max-width:720px; width:100%; max-height:80vh; display:flex; flex-direction:column; box-shadow:0 20px 60px rgba(18,33,31,.3); }
+  #cdp-exec .ai-modal-head{ padding:18px 22px; border-bottom:1px solid var(--line); position:relative; }
+  #cdp-exec .ai-modal-head h3{ margin:0 0 4px; font-size:15px; font-weight:600; }
+  #cdp-exec .ai-modal-head .sub{ font-size:12px; color:var(--muted); }
+  #cdp-exec .ai-modal-x{ position:absolute; top:14px; right:16px; border:none; background:transparent; font-size:22px; line-height:1; color:var(--muted); cursor:pointer; }
+  #cdp-exec .ai-modal-body{ padding:20px 22px; overflow:auto; font-size:13.5px; line-height:1.6; color:var(--ink2); white-space:pre-wrap; }
 </style>
 </head>
 <body>
@@ -104,9 +129,9 @@
 
     <div class="top">
       <div>
-        <p class="eyebrow">CDP Compliance &middot; Executive View</p>
-        <h1 class="h1">Design Presentation Compliance</h1>
-        <p class="sub"><span id="hdr-branch">All Experience Centres</span> &middot; <span id="hdr-range">&mdash;</span> &middot; <span id="hdr-count">0</span> presentations reviewed</p>
+        <p class="eyebrow">Compliance Dashboard</p>
+        <h1 class="h1">CDP &amp; DEM Compliance</h1>
+        <p class="sub"><span id="hdr-branch">All Experience Centres</span> &middot; <span id="hdr-range">-</span> &middot; <span id="hdr-count">0</span> projects reviewed</p>
       </div>
       <div class="toggle">
         <button type="button" id="tab-o" class="active" onclick="cdpView('overview')">Overview</button>
@@ -128,17 +153,24 @@
         </div>
       </div>
       <div class="fg">
-        <label>Design Manager</label>
+        <label>CDP DM</label>
         <div class="ms" id="ms-dm">
-          <button type="button" class="ms-btn" onclick="cdpToggleMenu('ms-dm')"><span>All DMs</span><span class="cnt" id="dm-cnt">All</span></button>
+          <button type="button" class="ms-btn" onclick="cdpToggleMenu('ms-dm')"><span>All CDP DMs</span><span class="cnt" id="dm-cnt">All</span></button>
           <div class="ms-menu" id="dm-menu"></div>
         </div>
       </div>
       <div class="fg">
-        <label>Project Status</label>
-        <div class="ms" id="ms-st">
-          <button type="button" class="ms-btn" onclick="cdpToggleMenu('ms-st')"><span>All Statuses</span><span class="cnt" id="st-cnt">All</span></button>
-          <div class="ms-menu" id="st-menu"></div>
+        <label>Milestone DM</label>
+        <div class="ms" id="ms-msdm">
+          <button type="button" class="ms-btn" onclick="cdpToggleMenu('ms-msdm')"><span>All Milestone DMs</span><span class="cnt" id="msdm-cnt">All</span></button>
+          <div class="ms-menu" id="msdm-menu"></div>
+        </div>
+      </div>
+      <div class="fg">
+        <label>Designer</label>
+        <div class="ms" id="ms-dsg">
+          <button type="button" class="ms-btn" onclick="cdpToggleMenu('ms-dsg')"><span>All Designers</span><span class="cnt" id="dsg-cnt">All</span></button>
+          <div class="ms-menu" id="dsg-menu"></div>
         </div>
       </div>
       <button type="button" class="btn btn-ghost" id="btn-reset">Reset</button>
@@ -148,11 +180,12 @@
 
     <!-- ===================== OVERVIEW ===================== -->
     <div id="v-overview">
+      <div style="margin:0 0 14px"><p class="eyebrow">CDP Compliance &middot; Executive View</p></div>
       <div class="kpis">
         <div class="kpi"><p class="lab">Presentations Reviewed</p><div class="val" id="k-total">0</div><div class="foot" id="k-total-foot"></div></div>
         <div class="kpi"><p class="lab">Avg Compliance</p><div class="val" id="k-avg">0%</div><div class="foot">across selected filters</div></div>
         <div class="kpi"><p class="lab">Fully Compliant</p><div class="val" id="k-full">0</div><div class="foot" id="k-full-foot"></div></div>
-        <div class="kpi"><p class="lab">Lowest Parameter</p><div class="val" id="k-low" style="font-size:22px;color:var(--bad)">&mdash;</div><div class="foot" id="k-low-foot"></div></div>
+        <div class="kpi"><p class="lab">Lowest Parameter</p><div class="val" id="k-low" style="font-size:22px;color:var(--bad)">-</div><div class="foot" id="k-low-foot"></div></div>
       </div>
 
       <div class="grid">
@@ -160,8 +193,27 @@
         <div class="panel"><h3>Parameter Pass Rate</h3><p class="psub">Share of presentations meeting each check</p><div class="box"><canvas id="c-param"></canvas></div></div>
       </div>
       <div class="grid eq">
-        <div class="panel"><h3>Design Managers &mdash; Ranked</h3><p class="psub">Average compliance under each DM</p><div id="dm-rank" class="rank"></div></div>
+        <div class="panel"><h3>CDP DMs - Ranked</h3><p class="psub">Average CDP compliance under each Net DM</p><div id="dm-rank" class="rank"></div></div>
         <div class="panel"><h3>Compliance Trend</h3><p class="psub">Weekly average (week starting)</p><div class="box sm"><canvas id="c-trend"></canvas></div></div>
+      </div>
+
+      <div style="margin:30px 0 14px;padding-top:22px;border-top:2px solid var(--line)">
+        <p class="eyebrow" style="color:var(--mid)">Design Execution Milestones &middot; separate phase</p>
+        <h2 style="font-family:'Instrument Serif',serif;font-weight:400;font-size:26px;margin:4px 0 0">DEM Progress</h2>
+        <p class="sub" style="margin:6px 0 0">Milestone-DM phase.</p>
+      </div>
+      <div class="kpis">
+        <div class="kpi"><p class="lab">Avg DEM %</p><div class="val" id="k-dem-avg">0%</div><div class="foot">across selected filters</div></div>
+        <div class="kpi"><p class="lab">DEM-1 Done</p><div class="val" id="k-dem1">0</div><div class="foot" id="k-dem1-foot"></div></div>
+        <div class="kpi"><p class="lab">DEM-2 Done</p><div class="val" id="k-dem2">0</div><div class="foot" id="k-dem2-foot"></div></div>
+        <div class="kpi"><p class="lab">DEM-3 Done</p><div class="val" id="k-dem3">0</div><div class="foot" id="k-dem3-foot"></div></div>
+      </div>
+      <div class="grid eq">
+        <div class="panel"><h3>DEM Milestone Funnel</h3><p class="psub">Projects reaching each milestone</p><div class="box sm"><canvas id="c-dem"></canvas></div></div>
+        <div class="panel"><h3>Milestone DMs - Ranked</h3><p class="psub">Average DEM % under each Milestone DM</p><div id="msdm-rank" class="rank"></div></div>
+      </div>
+      <div class="grid eq">
+        <div class="panel"><h3>DEM Progress by Experience Centre</h3><p class="psub">Average DEM % per centre</p><div class="box sm"><canvas id="c-dem-ec"></canvas></div></div>
       </div>
     </div>
 
@@ -169,7 +221,7 @@
     <div id="v-detailed">
       <div class="actionbar">
         <div class="search-uni">
-          <input type="text" id="uni-search" placeholder="Search any PID(s), comma-separated &mdash; ignores date range" autocomplete="off">
+          <input type="text" id="uni-search" placeholder="Search any PID(s), comma-separated - ignores date range" autocomplete="off">
           <button type="button" class="btn btn-go" id="uni-go">Search</button>
           <button type="button" class="btn btn-ghost" id="uni-clear">Clear</button>
         </div>
@@ -179,19 +231,38 @@
       </div>
 
       <div class="tbl-wrap">
-        <div class="tbl-head"><h3>Designer-Level Detail</h3><span class="meta"><span id="d-count">0</span> project(s) <span id="search-note"></span></span></div>
-        <div class="tbl-scroll">
+        <div class="tbl-head">
+          <div style="display:flex;align-items:center;gap:14px">
+            <h3>Designer-Level Detail</h3>
+            <div class="toggle" style="transform:scale(.92)">
+              <button type="button" id="dtab-cdp" class="active" onclick="cdpDetailView('cdp')">CDP</button>
+              <button type="button" id="dtab-ms" onclick="cdpDetailView('milestone')">Milestone</button>
+            </div>
+          </div>
+          <span class="meta"><span id="d-count">0</span> project(s) <span id="search-note"></span></span>
+        </div>
+
+        <div class="tbl-scroll" id="cdp-table-wrap">
           <table class="ct">
             <thead><tr>
-              <th class="sticky">PID</th><th>CX Name</th><th>Branch</th><th>Status</th><th>Designer</th><th>CDP Date</th>
+              <th class="sticky">PID</th><th>CX Name</th><th>Branch</th><th>Status</th><th>Net Designer</th><th>Net DM</th><th>CDP Date</th>
               <th>Gross Budget</th><th>CDP Budget</th>
               <th>RGM/DCM</th><th>RGM Rec.</th><th>CDP Notes</th><th>CDP Rec.</th><th>CDD Form</th><th>CDP PDF</th>
-              <th>DM Review</th><th>NET</th>
-              <th class="extra">Design Manager</th>
+              <th>DM Review</th><th>AI CDP</th><th>Sentiment</th><th>NET</th>
               <th class="extra">DM: Cust Req</th><th class="extra">DM: Theme</th><th class="extra">DM: Spatial</th><th class="extra">DM: Render</th><th class="extra">DM: Variants</th>
               <th class="extra">Reason</th>
             </tr></thead>
             <tbody id="rows-body"></tbody>
+          </table>
+        </div>
+
+        <div class="tbl-scroll" id="ms-table-wrap" style="display:none">
+          <table class="ct">
+            <thead><tr>
+              <th class="sticky">PID</th><th>CX Name</th><th>Branch</th><th>Status</th><th>Milestone Designer</th><th>Milestone DM</th>
+              <th>DEM-1</th><th>DEM-2</th><th>DEM-3</th><th>DEM %</th>
+            </tr></thead>
+            <tbody id="ms-rows-body"></tbody>
           </table>
         </div>
       </div>
@@ -199,16 +270,30 @@
 
   </div>
 
+  <div class="ai-overlay" id="ai-overlay" onclick="if(event.target===this)cdpCloseAI()">
+    <div class="ai-modal">
+      <div class="ai-modal-head">
+        <h3 id="ai-modal-title">AI Meeting Insight</h3>
+        <div class="sub" id="ai-modal-sub"></div>
+        <button class="ai-modal-x" onclick="cdpCloseAI()" title="Close">&times;</button>
+      </div>
+      <div class="ai-modal-body" id="ai-modal-body"></div>
+    </div>
+  </div>
+
 <script>
 (function(){
-  // Pulse routes by internal project id (not the PID). Links open the project's Files (drive) view.
+  // Pulse routes by internal project id. Notes/recordings -> /notes, PDF -> /drive.
   var PURL = "https://pulse.bonito.in/projects";
-  function projUrl(r){ return r.id ? PURL + '/' + encodeURIComponent(r.id) + '/drive' : null; }
+  var FORM_BASE = "https://app.bonito.in/form_wizard/form_responses";
+  function notesUrl(r){ return r.id ? PURL + '/' + encodeURIComponent(r.id) + '/notes' : null; }
+  function driveUrl(r){ return r.id ? PURL + '/' + encodeURIComponent(r.id) + '/drive' : null; }
+  function formUrl(rid){ return rid ? FORM_BASE + '/' + encodeURIComponent(rid) : null; }
   var API = "/api/cdp";
   var PARAMS = [["rgm_notes","RGM/DCM Notes"],["rgm_rec","RGM Recording"],["cdp_notes","CDP Notes"],["cdp_rec","CDP Recording"],["cdd_form","CDD Form"],["cdp_pdf","CDP PDF"],["dm_review","DM Review"]];
 
   var ALL = [];
-  var selEC=new Set(), selDM=new Set(), selST=new Set();
+  var selEC=new Set(), selCDPDM=new Set(), selMSDM=new Set(), selDSG=new Set();
   var searchRows = null;
   var charts = {};
   var MON=["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
@@ -216,9 +301,13 @@
   // ---- normalize a server row to the shape the UI expects ----
   function normalize(r){
     return { pid:String(r.project_no||''), id:r.project_id||'', cx:r.cx_name||'', branch:r.branch||'', designer:r.designer||'', dm:r.design_manager||'',
+      ms_designer:r.ms_designer||'', ms_dm:r.ms_design_manager||'',
+      dem1:!!r.dem1_ok, dem2:!!r.dem2_ok, dem3:!!r.dem3_ok, dem_dates:r.dem_dates||{}, dem_pct:r.dem_pct||0, dem_band:r.dem_band||'red',
       cdp_date:r.cdp_date||'', net_pct:r.net_pct||0, net_band:r.net_band||'red', status:r.project_status||'',
       gross:r.gross_budget||'', cdp_budget:r.cdp_budget||'', pdf_ok:!!r.cdp_pdf_ok, pdf_name:r.cdp_pdf_filename||'', reason:r.net_reason||'',
+      cdd_rid:r.cdd_rid||null, dmr_rid:r.dmr_rid||null,
       dm_scores:r.dm_scores||{},
+      ai_applies:!!r.ai_applies, ai_ready:!!r.ai_cdp_ready, ai_summary:r.ai_summary||'', ai_sentiment:r.ai_sentiment||'', ai_mtg:r.ai_meeting_date||'',
       checks:{ rgm_notes:r.rgm_notes_ok?1:0, rgm_rec:r.rgm_recording_ok?1:0, cdp_notes:r.cdp_notes_ok?1:0, cdp_rec:r.cdp_recording_ok?1:0, cdd_form:r.cdd_form_ok?1:0, cdp_pdf:r.cdp_pdf_ok?1:0, dm_review:r.dm_review_ok?1:0 } };
   }
 
@@ -228,20 +317,24 @@
   function uniq(arr){ return Array.from(new Set(arr.filter(Boolean))).sort(); }
   function esc(s){ return String(s==null?'':s).replace(/[&<>"]/g,function(c){return{'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c];}); }
 
-  function filtered(){
+  function pass(set, val){ return !set.size || set.has(val); }
+  function rowsExcept(except){
     return ALL.filter(function(r){
-      if (selEC.size && !selEC.has(r.branch)) return false;
-      if (selDM.size && !selDM.has(r.dm)) return false;
-      if (selST.size && !selST.has(r.status)) return false;
+      if (except!=='ec'    && !pass(selEC, r.branch)) return false;
+      if (except!=='cdpdm' && !pass(selCDPDM, r.dm)) return false;
+      if (except!=='msdm'  && !pass(selMSDM, r.ms_dm)) return false;
+      if (except!=='dsg'   && !pass(selDSG, r.designer) && !pass(selDSG, r.ms_designer)) return false;
       return true;
     });
   }
+  function filtered(){ return rowsExcept(null); }
 
   // ---- multi-select menus ----
   function buildMenu(menuId, values, sel, onchange){
     var m = document.getElementById(menuId);
     m.innerHTML = values.map(function(v){
-      return '<label><input type="checkbox" value="'+esc(v)+'">'+ (esc(v)||'(none)') +'</label>';
+      var checked = sel.has(v) ? ' checked' : '';
+      return '<label><input type="checkbox"'+checked+' value="'+esc(v)+'">'+ (esc(v)||'(none)') +'</label>';
     }).join('');
     m.querySelectorAll('input').forEach(function(cb){
       cb.addEventListener('change', function(){
@@ -259,10 +352,20 @@
     if (!e.target.closest('.ms')) document.querySelectorAll('#cdp-exec .ms').forEach(function(m){ m.classList.remove('open'); });
   });
 
+  function rebuildFilters(){
+    buildMenu('ec-menu',   uniq(rowsExcept('ec').map(function(r){return r.branch;})), selEC, onFilterChange);
+    buildMenu('dm-menu',   uniq(rowsExcept('cdpdm').map(function(r){return r.dm;})), selCDPDM, onFilterChange);
+    buildMenu('msdm-menu', uniq(rowsExcept('msdm').map(function(r){return r.ms_dm;})), selMSDM, onFilterChange);
+    var dsgRows = rowsExcept('dsg');
+    var designers = uniq(dsgRows.map(function(r){return r.designer;}).concat(dsgRows.map(function(r){return r.ms_designer;})));
+    buildMenu('dsg-menu', designers, selDSG, onFilterChange);
+    refreshCounts();
+  }
   function refreshCounts(){
-    document.getElementById('ec-cnt').textContent = selEC.size? selEC.size : 'All';
-    document.getElementById('dm-cnt').textContent = selDM.size? selDM.size : 'All';
-    document.getElementById('st-cnt').textContent = selST.size? selST.size : 'All';
+    document.getElementById('ec-cnt').textContent   = selEC.size? selEC.size : 'All';
+    document.getElementById('dm-cnt').textContent   = selCDPDM.size? selCDPDM.size : 'All';
+    document.getElementById('msdm-cnt').textContent = selMSDM.size? selMSDM.size : 'All';
+    document.getElementById('dsg-cnt').textContent  = selDSG.size? selDSG.size : 'All';
   }
 
   // ---- OVERVIEW render ----
@@ -318,44 +421,136 @@
     } else {
       var ctx=tc.getContext('2d'); ctx.clearRect(0,0,tc.width,tc.height); ctx.font="13px Inter"; ctx.fillStyle="#7d928d"; ctx.textAlign="center"; ctx.fillText("Widen the date range to see the weekly trend", (tc.width||300)/2, 110);
     }
+
+    // ---- DEM section (separate phase) ----
+    var d1=rows.filter(function(r){return r.dem1;}).length,
+        d2=rows.filter(function(r){return r.dem2;}).length,
+        d3=rows.filter(function(r){return r.dem3;}).length;
+    var demAvg=avg(rows.map(function(r){return r.dem_pct||0;}));
+    document.getElementById('k-dem-avg').innerHTML = demAvg + '<span style="font-size:17px;color:var(--muted)">%</span>';
+    document.getElementById('k-dem1').innerHTML = d1 + '<span style="font-size:17px;color:var(--muted)">/'+rows.length+'</span>';
+    document.getElementById('k-dem2').innerHTML = d2 + '<span style="font-size:17px;color:var(--muted)">/'+rows.length+'</span>';
+    document.getElementById('k-dem3').innerHTML = d3 + '<span style="font-size:17px;color:var(--muted)">/'+rows.length+'</span>';
+    document.getElementById('k-dem1-foot').textContent = rows.length? Math.round(d1*100/rows.length)+'% reached':'';
+    document.getElementById('k-dem2-foot').textContent = rows.length? Math.round(d2*100/rows.length)+'% reached':'';
+    document.getElementById('k-dem3-foot').textContent = rows.length? Math.round(d3*100/rows.length)+'% reached':'';
+
+    charts.dem=new Chart(document.getElementById('c-dem'),{type:'bar',
+      data:{labels:['DEM-1','DEM-2','DEM-3'],datasets:[{data:[d1,d2,d3],backgroundColor:['#0b6b5f','#3f8f82','#7bb3aa'],borderRadius:{topLeft:5,topRight:5},barPercentage:.6}]},
+      options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false},tooltip:{callbacks:{label:function(c){return c.parsed.y+' projects';}}}},
+        scales:{y:{beginAtZero:true,grid:{color:'#eef3f1'},border:{display:false}},x:{grid:{display:false},border:{display:false},ticks:{font:{weight:'600',size:12}}}}}});
+
+    var msm={}; rows.forEach(function(r){ if(r.ms_dm) (msm[r.ms_dm]=msm[r.ms_dm]||[]).push(r.dem_pct||0); });
+    var msd=Object.keys(msm).map(function(k){return [k,avg(msm[k])];}).sort(function(x,y){return y[1]-x[1];});
+    var msEl=document.getElementById('msdm-rank');
+    if(msEl) msEl.innerHTML = msd.length? msd.map(function(p){
+      return '<div class="rrow"><div class="nm">'+esc(p[0])+'</div><div class="bar"><span style="width:'+p[1]+'%;background:'+col(p[1])+'"></span></div><div class="pc">'+p[1]+'%</div></div>';
+    }).join('') : '<div style="color:var(--muted);font-size:12.5px">No Milestone DM data</div>';
+
+    var demEcm={}; rows.forEach(function(r){ (demEcm[r.branch]=demEcm[r.branch]||[]).push(r.dem_pct||0); });
+    var deL=Object.keys(demEcm).sort(), deV=deL.map(function(k){return avg(demEcm[k]);});
+    charts.demEc=new Chart(document.getElementById('c-dem-ec'),{type:'bar',
+      data:{labels:deL,datasets:[{data:deV,backgroundColor:deV.map(function(v){return v>=67?'#0f7a4d':v>=34?'#c07a1a':'#b23b3b';}),borderRadius:4,barPercentage:.6}]},
+      options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false},tooltip:{callbacks:{label:function(c){return c.parsed.y+'% avg DEM';}}}},
+        scales:{y:{beginAtZero:true,max:100,grid:{color:'#eef3f1'},border:{display:false},ticks:{stepSize:25,callback:function(v){return v+'%';}}},x:{grid:{display:false},border:{display:false}}}}});
+  }
+  // generic tick/cross linking to a url (or plain if no url)
+  function linkCell(ok, url, title){
+    var cls = ok ? 'tick' : 'cross', sym = ok ? '\u2713' : '\u2717';
+    if(!url) return '<span class="'+cls+'">'+sym+'</span>';
+    return '<a class="'+cls+'" href="'+url+'" target="_blank" title="'+esc(title||'')+'">'+sym+'</a>';
+  }
+  // notes-based checks (RGM/DCM, RGM rec, CDP notes, CDP rec) -> Pulse /notes
+  function notesCell(ok, r){ return linkCell(ok, notesUrl(r), 'Open notes in Pulse'); }
+  // form-response checks (CDD, DM review) -> app.bonito form response
+  function formCell(ok, rid, label){ return linkCell(ok, formUrl(rid), label); }
+  // AI CDP: "–" when the AI era doesn't apply (pre-Aug-3 meeting / no meeting);
+  // otherwise a tick/cross. When a summary exists it's clickable to expand.
+  function aiCell(r){
+    if(!r.ai_applies && !r.ai_ready && !r.ai_summary) return '<span style="color:var(--muted)">\u2013</span>';
+    var sym = r.ai_ready ? '\u2713' : '\u2717';
+    var cls = r.ai_ready ? 'tick' : 'cross';
+    if(r.ai_summary){
+      return '<a class="'+cls+'" href="#" title="View AI summary" onclick="cdpShowAI('+"'"+esc(r.pid)+"'"+');return false;">'+sym+'</a>';
+    }
+    return '<span class="'+cls+'">'+sym+'</span>';
+  }
+  function sentimentCell(r){
+    if(!r.ai_sentiment) return '<span style="color:var(--muted)">\u2013</span>';
+    var s=r.ai_sentiment, c = s==='Positive'?'var(--good)': s==='Negative'?'var(--bad)':'var(--mid)';
+    return '<span style="color:'+c+';font-weight:600">'+esc(s)+'</span>';
   }
 
-  // ---- DETAILED render ----
-  function ynCell(v){ return v ? '<span class="yn-yes">Yes</span>' : '<span class="yn-no">No</span>'; }
-  function checkCell(ok, r){
-    var url = projUrl(r);
-    var cls = ok ? 'tick' : 'cross';
-    var sym = ok ? '\u2713' : '\u2717';
-    if(!url) return '<span class="'+cls+'">'+sym+'</span>';
-    return '<a class="'+cls+'" href="'+url+'" target="_blank" title="Open project '+esc(r.pid)+' in Pulse">'+sym+'</a>';
+  // AI summary modal ---------------------------------------------------
+  function findRow(pid){
+    var pool = searchRows !== null ? searchRows : ALL;
+    for(var i=0;i<pool.length;i++) if(String(pool[i].pid)===String(pid)) return pool[i];
+    return null;
   }
+  window.cdpShowAI=function(pid){
+    var r=findRow(pid); if(!r) return;
+    var ov=document.getElementById('ai-overlay');
+    var sent = r.ai_sentiment? '<span style="font-weight:600;color:'+(r.ai_sentiment==='Positive'?'var(--good)':r.ai_sentiment==='Negative'?'var(--bad)':'var(--mid)')+'">'+esc(r.ai_sentiment)+'</span>' : '\u2013';
+    document.getElementById('ai-modal-title').textContent = 'AI Meeting Insight \u00b7 PID '+r.pid;
+    document.getElementById('ai-modal-sub').innerHTML = esc(r.cx)+' \u00b7 CDP meeting '+(esc(r.ai_mtg)||'\u2014')+' \u00b7 Sentiment: '+sent;
+    document.getElementById('ai-modal-body').textContent = r.ai_summary || 'No summary available.';
+    ov.style.display='flex';
+  };
+  window.cdpCloseAI=function(){ document.getElementById('ai-overlay').style.display='none'; };
+
   function rowHtml(r){
     var d=r.dm_scores||{};
-    var url=projUrl(r);
-    // PDF: no OCR on Netlify. Present -> open the project's Files view in Pulse; else "None".
+    // PDF -> Pulse /drive (Files view).
+    var durl=driveUrl(r);
     var pdf = r.checks.cdp_pdf
-      ? (url ? '<a class="pdf-link" href="'+url+'" target="_blank" title="'+esc(r.pdf_name||'CDP PDF')+'">Present</a>' : '<span class="yn-yes">Present</span>')
+      ? (durl ? '<a class="pdf-link" href="'+durl+'" target="_blank" title="'+esc(r.pdf_name||'CDP PDF')+'">Present</a>' : '<span class="yn-yes">Present</span>')
       : '<span class="yn-no">None</span>';
     return '<tr>'+
       '<td class="sticky">'+esc(r.pid)+'</td>'+
-      '<td>'+esc(r.cx)+'</td><td>'+esc(r.branch)+'</td><td><span class="pill">'+esc(r.status)+'</span></td><td>'+esc(r.designer)+'</td><td>'+(esc(r.cdp_date)||'\u2014')+'</td>'+
+      '<td>'+esc(r.cx)+'</td><td>'+esc(r.branch)+'</td><td><span class="pill">'+esc(r.status)+'</span></td><td>'+esc(r.designer)+'</td><td>'+(esc(r.dm)||'\u2014')+'</td><td>'+(esc(r.cdp_date)||'\u2014')+'</td>'+
       '<td>'+(esc(r.gross)||'\u2014')+'</td><td>'+(esc(r.cdp_budget)||'\u2014')+'</td>'+
-      '<td class="cc">'+checkCell(r.checks.rgm_notes,r)+'</td>'+
-      '<td class="cc">'+checkCell(r.checks.rgm_rec,r)+'</td>'+
-      '<td class="cc">'+checkCell(r.checks.cdp_notes,r)+'</td>'+
-      '<td class="cc">'+checkCell(r.checks.cdp_rec,r)+'</td>'+
-      '<td class="cc">'+checkCell(r.checks.cdd_form,r)+'</td>'+
+      '<td class="cc">'+notesCell(r.checks.rgm_notes,r)+'</td>'+
+      '<td class="cc">'+notesCell(r.checks.rgm_rec,r)+'</td>'+
+      '<td class="cc">'+notesCell(r.checks.cdp_notes,r)+'</td>'+
+      '<td class="cc">'+notesCell(r.checks.cdp_rec,r)+'</td>'+
+      '<td class="cc">'+formCell(r.checks.cdd_form,r.cdd_rid,'Open CDD form response')+'</td>'+
       '<td class="cc">'+pdf+'</td>'+
-      '<td class="cc">'+ynCell(r.checks.dm_review)+'</td>'+
+      '<td class="cc">'+formCell(r.checks.dm_review,r.dmr_rid,'Open DM review form response')+'</td>'+
+      '<td class="cc">'+aiCell(r)+'</td>'+
+      '<td class="cc">'+sentimentCell(r)+'</td>'+
       '<td class="net net-'+r.net_band+'">'+r.net_pct+'%</td>'+
-      '<td class="extra">'+esc(r.dm)+'</td>'+
       '<td class="extra">'+(esc(d.customer_requirement)||'\u2014')+'</td><td class="extra">'+(esc(d.theme)||'\u2014')+'</td><td class="extra">'+(esc(d.spatial_planning)||'\u2014')+'</td><td class="extra">'+(esc(d.render)||'\u2014')+'</td><td class="extra">'+(esc(d.quotation_variants)||'\u2014')+'</td>'+
       '<td class="extra" style="white-space:normal;max-width:220px;font-size:11px">'+(esc(r.reason)||'\u2014')+'</td>'+
     '</tr>';
   }
+  // DEM milestone tick (with completion date tooltip)
+  function demCell(done, date){
+    if(done) return '<span class="tick" title="'+esc(date||'done')+'">\u2713</span>';
+    return '<span class="cross">\u2717</span>';
+  }
+  // Milestone-phase row
+  function msRowHtml(r){
+    var dd=r.dem_dates||{};
+    return '<tr>'+
+      '<td class="sticky">'+esc(r.pid)+'</td>'+
+      '<td>'+esc(r.cx)+'</td><td>'+esc(r.branch)+'</td><td><span class="pill">'+esc(r.status)+'</span></td>'+
+      '<td>'+(esc(r.ms_designer)||'\u2014')+'</td><td>'+(esc(r.ms_dm)||'\u2014')+'</td>'+
+      '<td class="cc">'+demCell(r.dem1, dd['DEM-1'])+'</td>'+
+      '<td class="cc">'+demCell(r.dem2, dd['DEM-2'])+'</td>'+
+      '<td class="cc">'+demCell(r.dem3, dd['DEM-3'])+'</td>'+
+      '<td class="net net-'+(r.dem_band||'red')+'">'+(r.dem_pct||0)+'%</td>'+
+    '</tr>';
+  }
+  window.cdpDetailView=function(which){
+    var cdp=document.getElementById('cdp-table-wrap'), ms=document.getElementById('ms-table-wrap');
+    var tc=document.getElementById('dtab-cdp'), tm=document.getElementById('dtab-ms');
+    if(which==='milestone'){ cdp.style.display='none'; ms.style.display=''; tm.classList.add('active'); tc.classList.remove('active'); }
+    else { ms.style.display='none'; cdp.style.display=''; tc.classList.add('active'); tm.classList.remove('active'); }
+  };
   function renderDetailed(){
     var rows = searchRows !== null ? searchRows : filtered();
-    document.getElementById('rows-body').innerHTML = rows.length ? rows.map(rowHtml).join('') : '<tr><td colspan="23" class="empty">No projects match.</td></tr>';
+    document.getElementById('rows-body').innerHTML = rows.length ? rows.map(rowHtml).join('') : '<tr><td colspan="24" class="empty">No projects match.</td></tr>';
+    document.getElementById('ms-rows-body').innerHTML = rows.length ? rows.map(msRowHtml).join('') : '<tr><td colspan="10" class="empty">No projects match.</td></tr>';
     document.getElementById('d-count').textContent = rows.length;
     document.getElementById('search-note').innerHTML = searchRows!==null ? '&middot; universal search (all dates)' : '';
   }
@@ -366,15 +561,15 @@
   document.getElementById('uni-clear').addEventListener('click', function(){ document.getElementById('uni-search').value=''; searchRows=null; renderDetailed(); });
   function doSearch(){
     var q=document.getElementById('uni-search').value.trim(); if(!q) return;
-    var body=document.getElementById('rows-body'); body.innerHTML='<tr><td colspan="23" style="padding:24px;text-align:center;color:var(--muted)">Searching\u2026</td></tr>';
+    var body=document.getElementById('rows-body'); body.innerHTML='<tr><td colspan="25" style="padding:24px;text-align:center;color:var(--muted)">Searching\u2026</td></tr>';
     fetch(API+'?pid='+encodeURIComponent(q))
       .then(function(r){return r.json();})
       .then(function(d){
-        if(!d.rows || !d.rows.length){ body.innerHTML='<tr><td colspan="23" style="padding:24px;text-align:center;color:var(--muted)">No matching PIDs found</td></tr>'; searchRows=[]; document.getElementById('d-count').textContent=0; return; }
+        if(!d.rows || !d.rows.length){ body.innerHTML='<tr><td colspan="25" style="padding:24px;text-align:center;color:var(--muted)">No matching PIDs found</td></tr>'; searchRows=[]; document.getElementById('d-count').textContent=0; return; }
         searchRows = d.rows.map(normalize);
         renderDetailed();
       })
-      .catch(function(){ body.innerHTML='<tr><td colspan="23" style="padding:24px;text-align:center;color:var(--bad)">Search failed</td></tr>'; });
+      .catch(function(){ body.innerHTML='<tr><td colspan="25" style="padding:24px;text-align:center;color:var(--bad)">Search failed</td></tr>'; });
   }
 
   // ---- DM columns toggle ----
@@ -411,7 +606,7 @@
   };
 
   // ---- filter change ----
-  function onFilterChange(){ refreshCounts(); renderOverview(); if(searchRows===null) renderDetailed(); document.getElementById('hdr-count').textContent=filtered().length; }
+  function onFilterChange(){ rebuildFilters(); renderOverview(); if(searchRows===null) renderDetailed(); document.getElementById('hdr-count').textContent=filtered().length; }
 
   // ---- data load ----
   function fmtPretty(from,to){
@@ -426,18 +621,15 @@
     var from=document.getElementById('f-from').value, to=document.getElementById('f-to').value;
     var mc=document.getElementById('f-minchars').value||100;
     document.getElementById('notice-slot').innerHTML='';
-    document.getElementById('rows-body').innerHTML='<tr><td colspan="23" class="loading">Loading\u2026</td></tr>';
+    document.getElementById('rows-body').innerHTML='<tr><td colspan="25" class="loading">Loading\u2026</td></tr>';
     var url=API+'?from='+from+'&to='+to+'&min_chars='+encodeURIComponent(mc);
     fetch(url).then(function(r){return r.json();}).then(function(d){
       if(d.error){ document.getElementById('notice-slot').innerHTML='<div class="notice">Error loading data: '+esc(d.error)+'</div>'; return; }
       if(d.too_many){ document.getElementById('notice-slot').innerHTML='<div class="notice">Found <strong>'+d.summary.total_found+'</strong> projects. Narrow the date range or filters to load the dashboard.</div>'; ALL=[]; }
       else { ALL=(d.rows||[]).map(normalize); }
       searchRows=null;
-      selEC.clear(); selDM.clear(); selST.clear();
-      buildMenu('ec-menu', d.available_branches||uniq(ALL.map(function(r){return r.branch;})), selEC, onFilterChange);
-      buildMenu('dm-menu', uniq(ALL.map(function(r){return r.dm;})), selDM, onFilterChange);
-      buildMenu('st-menu', d.available_statuses||uniq(ALL.map(function(r){return r.status;})), selST, onFilterChange);
-      refreshCounts();
+      selEC.clear(); selCDPDM.clear(); selMSDM.clear(); selDSG.clear();
+      rebuildFilters();
       document.getElementById('hdr-range').textContent = fmtPretty(d.from||from, d.to||to);
       document.getElementById('hdr-count').textContent = ALL.length;
       renderOverview(); renderDetailed();
