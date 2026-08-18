@@ -364,9 +364,11 @@ const SCORE_CHECKS = [
 const AI_CHECK = ["ai_cdp_ok", "AI insight (CDP)"];
 
 function computeOverall(row) {
-  // Flex denominator: the AI check only joins the scoring for CDP meetings
-  // in the AI era (Aug 3 2026+). Pre-era rows keep the original 7-check total.
-  const checks = row.ai_applies ? SCORE_CHECKS.concat([AI_CHECK]) : SCORE_CHECKS;
+  // Always 7 checks. The AI insight is NOT scored separately - it already
+  // satisfies cdp_notes_ok and cdp_recording_ok (an insight proves the CDP
+  // meeting was recorded + transcribed). So AI is one WAY to pass CDP, not an
+  // extra hurdle. AI CDP stays as a display-only column.
+  const checks = SCORE_CHECKS;
   const passed = checks.filter(([k]) => row[k]).length;
   const total = checks.length;
   const pct = Math.round((passed * 100) / total);
