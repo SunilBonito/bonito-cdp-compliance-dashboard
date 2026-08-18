@@ -89,14 +89,30 @@ const stripHtml = (s) =>
     .replace(/\s+/g, " ")
     .trim();
 
+// A recording link is any Teams meetingrecap / SharePoint video / Stream URL.
 const hasRecordingLink = (content) => {
   const c = content || "";
   return (
     /sharepoint\.com\/:v:/i.test(c) ||
-    /teams\.cloud\.microsoft\/l\/meetingrecap/i.test(c) ||
     /sharepoint\.com\/[^"'\s]*\.(mp4|mov|webm)/i.test(c) ||
-    /teams\.microsoft\.com\/[^"'\s]*recording/i.test(c)
+    /(web\.)?microsoftstream\.com/i.test(c) ||
+    /teams\.(cloud\.microsoft|microsoft\.com)\/l\/meetingrecap/i.test(c) ||
+    /teams\.microsoft\.com\/[^"'\s]*recording/i.test(c) ||
+    /\|\s*meeting\s*\|\s*microsoft\s*teams/i.test(c)
   );
+};
+// Note tags are unreliable (a DCM recording can sit under a "cdp" tag), so we
+// judge a recording by the MEETING NAMED in the recap text, not the note subject.
+// DCM recap -> counts as the RGM/DCM recording; CDP recap -> the CDP recording.
+const hasDcmRecording = (content) => {
+  const c = content || "";
+  if (!hasRecordingLink(c)) return false;
+  return /design consultation meeting|\(dcm\)|\bdcm\b|\brgm\b/i.test(c);
+};
+const hasCdpRecording = (content) => {
+  const c = content || "";
+  if (!hasRecordingLink(c)) return false;
+  return /celebrity design presentation|\(cdp\)/i.test(c);
 };
 
 const fmtL = (lacs) => {
@@ -247,11 +263,13 @@ exports.handler = async (event) => {
 
       const checks = {
         rgm_notes_ok:     cddFilled || rgmNotesContent,
-        rgm_recording_ok: rgm.some((n) => n.rec),
+        // Recording judged by the meeting named in the recap link (any note),
+        // since note subject tags are unreliable (DCM recap can sit under "cdp").
+        rgm_recording_ok: nList.some((n) => n.dcm_rec),
         // A ready AI insight proves the CDP meeting was recorded + transcribed,
         // so it satisfies both CDP notes and CDP recording.
         cdp_notes_ok:     aiCdpReady || cdp.some((n) => n.text_len >= minChars),
-        cdp_recording_ok: aiCdpReady || cdp.some((n) => n.rec),
+        cdp_recording_ok: aiCdpReady || nList.some((n) => n.cdp_rec),
         cdd_form_ok:      cddFilled,
         cdp_pdf_ok:       !!pdfFlags[id],
         dm_review_ok:     dmReviewPassed(cdpData),
@@ -437,6 +455,8 @@ async function notesByProject(db, ids) {
       subject: n.subject || "",
       text_len: stripHtml(n.content).length,
       rec: hasRecordingLink(n.content),
+      dcm_rec: hasDcmRecording(n.content),
+      cdp_rec: hasCdpRecording(n.content),
     });
   }
   return out;
