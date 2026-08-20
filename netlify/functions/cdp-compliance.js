@@ -121,6 +121,13 @@ const fmtL = (lacs) => {
   return n === Math.trunc(n) ? `${Math.trunc(n)}L` : `${n.toFixed(1)}L`;
 };
 
+// rupees -> lakhs, 2 decimals (for CDP budget from quotes)
+const lakhs2 = (rupees) => round2(parseFloat(rupees) / 100000);
+const round2 = (n) => {
+  const v = Math.round((parseFloat(n) + Number.EPSILON) * 100) / 100;
+  return String(v);
+};
+
 const parseRange = (from, to) => {
   const today = new Date();
   let f = from ? new Date(from) : new Date(today.getTime() - 7 * 864e5);
@@ -226,7 +233,7 @@ exports.handler = async (event) => {
     const ids = projectIds;
 
     const [
-      projMeta, notes, cddForms, cdpForms, pdfFlags, statuses, props, cdpDates, aiInsights, demStatus,
+      projMeta, notes, cddForms, cdpForms, pdfFlags, statuses, props, cdpDates, aiInsights, demStatus, draftQuotes,
     ] = await Promise.all([
       projectMeta(db, ids),
       notesByProject(db, ids),
@@ -238,6 +245,7 @@ exports.handler = async (event) => {
       cdpCloseDates(db, ids),
       aiInsightsByProject(db, ids),
       demByProject(db, ids),
+      lowestDraftQuote(db, ids),
     ]);
 
     // 3) assemble rows ----------------------------------------------------
@@ -280,10 +288,20 @@ exports.handler = async (event) => {
       const dmScores = {};
       if (cdpData) for (const [k, itemId] of Object.entries(DM_SCORE_ITEMS)) dmScores[k] = String(cdpData[itemId] ?? "");
 
+      // CDP Budget: prefer the lowest DRAFT quote's grand_total (in rupees ->
+      // lakhs). If no draft quote, fall back to the DM form field (unit-fixed).
       let cdpBudget = null;
-      if (cdpData) {
-        const v = String(cdpData[CDP_BUDGET_ITEM] ?? "").trim();
-        if (v && parseFloat(v) > 0) cdpBudget = `${v}L`;
+      const draftRs = draftQuotes[id];
+      if (draftRs && draftRs > 0) {
+        cdpBudget = `${lakhs2(draftRs)}L`;
+      } else if (cdpData) {
+        const raw = parseFloat(String(cdpData[CDP_BUDGET_ITEM] ?? "").trim());
+        if (raw > 0) {
+          // Unit guard: the form is meant to be in lakhs. A value >= 1000 means
+          // someone typed raw rupees (e.g. 1200000 = 12L), so divide by a lakh.
+          const lakhVal = raw >= 1000 ? raw / 100000 : raw;
+          cdpBudget = `${round2(lakhVal)}L`;
+        }
       }
 
       // DEM milestones (separate phase, scored apart from CDP NET)
@@ -535,6 +553,23 @@ async function propertyBudgets(db, ids) {
     else if (b > 0) g = fmtL(b);
     out[x.pid] = g;
   }
+  return out;
+}
+
+// Lowest DRAFT quote grand_total per project. A draft = never sent (sent_date NULL).
+async function lowestDraftQuote(db, ids) {
+  const r = await db.query(
+    `SELECT quotable_id AS pid, MIN(grand_total) AS lowest
+     FROM quotes
+     WHERE quotable_type = 'Project'
+       AND quotable_id = ANY($1::bigint[])
+       AND sent_date IS NULL
+       AND grand_total > 0
+     GROUP BY quotable_id`,
+    [ids]
+  );
+  const out = {};
+  for (const x of r.rows) out[x.pid] = parseFloat(x.lowest) || 0;
   return out;
 }
 
