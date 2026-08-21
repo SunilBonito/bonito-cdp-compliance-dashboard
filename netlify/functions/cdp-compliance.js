@@ -89,30 +89,35 @@ const stripHtml = (s) =>
     .replace(/\s+/g, " ")
     .trim();
 
-// A recording link is any Teams meetingrecap / SharePoint video / Stream URL.
+// A recording lives on a meeting/video platform: Teams, SharePoint, or Stream.
+// We count ANY such link as a recording (URL formats vary - /l/chat, /l/meetingrecap,
+// :v:, etc.), but NOT random doc/image links (cloudfront images, drive docs).
 const hasRecordingLink = (content) => {
   const c = content || "";
   return (
-    /sharepoint\.com\/:v:/i.test(c) ||
-    /sharepoint\.com\/[^"'\s]*\.(mp4|mov|webm)/i.test(c) ||
+    /sharepoint\.com/i.test(c) ||
     /(web\.)?microsoftstream\.com/i.test(c) ||
-    /teams\.(cloud\.microsoft|microsoft\.com)\/l\/meetingrecap/i.test(c) ||
-    /teams\.microsoft\.com\/[^"'\s]*recording/i.test(c) ||
-    /\|\s*meeting\s*\|\s*microsoft\s*teams/i.test(c)
+    /teams\.(cloud\.microsoft|microsoft\.com)/i.test(c) ||
+    /microsoft\s*teams/i.test(c)
   );
 };
-// Note tags are unreliable (a DCM recording can sit under a "cdp" tag), so we
-// judge a recording by the MEETING NAMED in the recap text, not the note subject.
-// DCM recap -> counts as the RGM/DCM recording; CDP recap -> the CDP recording.
-const hasDcmRecording = (content) => {
+const namesDcm = (c) => /design consultation meeting|\(dcm\)|\bdcm\b|\brgm\b/i.test(c || "");
+const namesCdp = (c) => /celebrity design presentation|\(cdp\)/i.test(c || "");
+const subjectIsDcm = (s) => /^(dcm|rgm)/i.test((s || "").trim());
+const subjectIsCdp = (s) => /^cdp/i.test((s || "").trim());
+const hasDcmRecording = (content, subject) => {
   const c = content || "";
   if (!hasRecordingLink(c)) return false;
-  return /design consultation meeting|\(dcm\)|\bdcm\b|\brgm\b/i.test(c);
+  if (namesDcm(c)) return true;
+  if (namesCdp(c)) return false;
+  return subjectIsDcm(subject);
 };
-const hasCdpRecording = (content) => {
+const hasCdpRecording = (content, subject) => {
   const c = content || "";
   if (!hasRecordingLink(c)) return false;
-  return /celebrity design presentation|\(cdp\)/i.test(c);
+  if (namesCdp(c)) return true;
+  if (namesDcm(c)) return false;
+  return subjectIsCdp(subject);
 };
 
 const fmtL = (lacs) => {
@@ -475,8 +480,8 @@ async function notesByProject(db, ids) {
       subject: n.subject || "",
       text_len: stripHtml(n.content).length,
       rec: hasRecordingLink(n.content),
-      dcm_rec: hasDcmRecording(n.content),
-      cdp_rec: hasCdpRecording(n.content),
+      dcm_rec: hasDcmRecording(n.content, n.subject),
+      cdp_rec: hasCdpRecording(n.content, n.subject),
     });
   }
   return out;
