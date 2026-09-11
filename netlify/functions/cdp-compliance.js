@@ -40,9 +40,11 @@ const AI_READY = "insights_ready";
 // DEM-1 = design_discussion2, DEM-2 = design_discussion3, DEM-3 = design_discussion4.
 // "Done" = the task's close_date is set. No AI insights for DEM yet.
 const DEM_TASKS = [
-  ["dem1_ok", "design_discussion2", "DEM-1"],
-  ["dem2_ok", "design_discussion3", "DEM-2"],
-  ["dem3_ok", "design_discussion4", "DEM-3"],
+  ["ism_ok",  "measurement_visit", "Initial Site Measurement"],
+  ["dem1_ok", "design_discussion2", "DEM-1(rec)"],
+  ["dem2_ok", "design_discussion3", "DEM-2(rec)"],
+  ["dem3_ok", "design_discussion4", "DEM-3(rec)"],
+  ["cm_ok",   "cross_measurement1_mom", "VM Notes"],
 ];
 
 // DM scoring item ids from the CDP_COMPLIANCE form (reference only + dm_review)
@@ -101,23 +103,26 @@ const hasRecordingLink = (content) => {
     /microsoft\s*teams/i.test(c)
   );
 };
+// Meeting-name matching (broad: catches "CDP meeting of Mrs X", plain CDP/DCM/RGM).
+const namesCdp = (c) => /celebrity design presentation|\(cdp\)|\bcdp\b/i.test(c || "");
 const namesDcm = (c) => /design consultation meeting|\(dcm\)|\bdcm\b|\brgm\b/i.test(c || "");
-const namesCdp = (c) => /celebrity design presentation|\(cdp\)/i.test(c || "");
-const subjectIsDcm = (s) => /^(dcm|rgm)/i.test((s || "").trim());
-const subjectIsCdp = (s) => /^cdp/i.test((s || "").trim());
-const hasDcmRecording = (content, subject) => {
+// ~47% of notes leave the Type dropdown (subject) blank and only type a Title
+// like "CDP MOM". So classify by subject AND title together.
+const tagIsCdp = (subject, title) => /cdp/i.test(`${subject || ""} ${title || ""}`);
+const tagIsDcm = (subject, title) => /dcm|rgm/i.test(`${subject || ""} ${title || ""}`);
+// STRICT recording: a link must exist AND name the meeting; the subject/title is
+// only a last-resort tiebreak when the link names neither meeting.
+const hasCdpRecording = (content, subject, title) => {
   const c = content || "";
   if (!hasRecordingLink(c)) return false;
-  if (namesDcm(c)) return true;
-  if (namesCdp(c)) return false;
-  return subjectIsDcm(subject);
+  const namedEither = namesCdp(c) || namesDcm(c);
+  return namesCdp(c) || (!namedEither && tagIsCdp(subject, title));
 };
-const hasCdpRecording = (content, subject) => {
+const hasDcmRecording = (content, subject, title) => {
   const c = content || "";
   if (!hasRecordingLink(c)) return false;
-  if (namesCdp(c)) return true;
-  if (namesDcm(c)) return false;
-  return subjectIsCdp(subject);
+  const namedEither = namesCdp(c) || namesDcm(c);
+  return namesDcm(c) || (!namedEither && tagIsDcm(subject, title));
 };
 
 const fmtL = (lacs) => {
@@ -257,8 +262,8 @@ exports.handler = async (event) => {
     const rows = ids.map((id) => {
       const meta = projMeta[id] || {};
       const nList = notes[id] || [];
-      const rgm = nList.filter((n) => /^(DCM|RGM)/i.test(n.subject));
-      const cdp = nList.filter((n) => /^CDP/i.test(n.subject));
+      const rgm = nList.filter((n) => n.is_dcm_note);
+      const cdp = nList.filter((n) => n.is_cdp_note);
 
       const cddEntry = cddForms[id];
       const cddData = cddEntry ? cddEntry.data : null;
@@ -276,19 +281,14 @@ exports.handler = async (event) => {
 
       const checks = {
         rgm_notes_ok:     cddFilled || rgmNotesContent,
-        // Recording judged by the meeting named in the recap link (any note),
-        // since note subject tags are unreliable (DCM recap can sit under "cdp").
         rgm_recording_ok: nList.some((n) => n.dcm_rec),
-        // A ready AI insight proves the CDP meeting was recorded + transcribed,
-        // so it satisfies both CDP notes and CDP recording.
-        cdp_notes_ok:     aiCdpReady || cdp.some((n) => n.text_len >= minChars),
-        cdp_recording_ok: aiCdpReady || nList.some((n) => n.cdp_rec),
+        // Process-compliance: CDP notes/recording rely ONLY on what's pasted in
+        // the notes. AI does NOT satisfy them (team decision).
+        cdp_notes_ok:     cdp.some((n) => n.text_len >= minChars),
+        cdp_recording_ok: nList.some((n) => n.cdp_rec),
         cdd_form_ok:      cddFilled,
-        cdp_pdf_ok:       !!pdfFlags[id],
         dm_review_ok:     dmReviewPassed(cdpData),
       };
-      // 8th check, only when the CDP meeting is in the AI era:
-      if (aiApplies) checks.ai_cdp_ok = aiCdpReady;
 
       const dmScores = {};
       if (cdpData) for (const [k, itemId] of Object.entries(DM_SCORE_ITEMS)) dmScores[k] = String(cdpData[itemId] ?? "");
@@ -309,11 +309,12 @@ exports.handler = async (event) => {
         }
       }
 
-      // DEM milestones (separate phase, scored apart from CDP NET)
+      // DEM milestones (separate phase, scored apart from CDP NET) - now 5 checks
       const dem = demStatus[id] || {};
-      const dem1 = !!dem.dem1_ok, dem2 = !!dem.dem2_ok, dem3 = !!dem.dem3_ok;
-      const demPassed = [dem1, dem2, dem3].filter(Boolean).length;
-      const demPct = Math.round((demPassed * 100) / 3);
+      const demFlags = {};
+      DEM_TASKS.forEach(([key]) => { demFlags[key] = !!dem[key]; });
+      const demPassed = DEM_TASKS.filter(([key]) => demFlags[key]).length;
+      const demPct = Math.round((demPassed * 100) / DEM_TASKS.length);
       const demBand = demPct === 100 ? "green" : demPct >= 34 ? "amber" : "red";
 
       const row = {
@@ -329,21 +330,13 @@ exports.handler = async (event) => {
         project_status: statuses[id] || "Unknown",
         gross_budget: props[id] || "",
         cdp_budget: cdpBudget || "",
-        cdp_pdf_ok: checks.cdp_pdf_ok,
-        cdp_pdf_filename: pdfFlags[id]?.filename || null,
         cdd_rid: cddEntry ? cddEntry.rid : null,
         dmr_rid: cdpEntry ? cdpEntry.rid : null,
         dm_scores: dmScores,
-        // DEM (separate score)
-        dem1_ok: dem1, dem2_ok: dem2, dem3_ok: dem3,
+        // DEM (separate score) - 5 milestones
+        ...demFlags,
         dem_dates: dem.dem_dates || {},
         dem_passed: demPassed, dem_pct: demPct, dem_band: demBand,
-        // AI insight surface (read-only, the tech team's pipeline output)
-        ai_applies: aiApplies,
-        ai_cdp_ready: aiCdpReady,
-        ai_summary: ai.summary || "",
-        ai_sentiment: ai.sentiment || "",
-        ai_meeting_date: cdpMeetingDate,
         ...checks,
       };
       computeOverall(row);
@@ -374,32 +367,28 @@ exports.handler = async (event) => {
   }
 };
 
-// ---- verdict + summary (ported) ----------------------------------------
-const SCORE_CHECKS = [
-  ["rgm_notes_ok", "RGM/DCM notes"],
-  ["rgm_recording_ok", "RGM recording"],
-  ["cdp_notes_ok", "CDP notes"],
-  ["cdp_recording_ok", "CDP recording"],
-  ["cdd_form_ok", "CDD form"],
-  ["cdp_pdf_ok", "CDP presentation"],
-  ["dm_review_ok", "DM review"],
+// ---- weighted verdict + summary ----------------------------------------
+// Weighted model (base totals 80%); Design Quality (from Supabase, client-side)
+// adds the remaining 20%. CDP PDF, AI, Sentiment are not scored. CDD before RGM.
+const WEIGHTED_CHECKS = [
+  ["cdd_form_ok",      "CDD Form",       12],
+  ["rgm_notes_ok",     "RGM",            12],
+  ["rgm_recording_ok", "RGM Recording",  15],
+  ["dm_review_ok",     "DM Review",      15],
+  ["cdp_recording_ok", "CDP Recording",  15],
+  ["cdp_notes_ok",     "CDP Notes",      11],
 ];
-const AI_CHECK = ["ai_cdp_ok", "AI insight (CDP)"];
 
 function computeOverall(row) {
-  // Always 7 checks. The AI insight is NOT scored separately - it already
-  // satisfies cdp_notes_ok and cdp_recording_ok (an insight proves the CDP
-  // meeting was recorded + transcribed). So AI is one WAY to pass CDP, not an
-  // extra hurdle. AI CDP stays as a display-only column.
-  const checks = SCORE_CHECKS;
-  const passed = checks.filter(([k]) => row[k]).length;
-  const total = checks.length;
-  const pct = Math.round((passed * 100) / total);
-  row.net_passed = passed;
-  row.net_total = total;
-  row.net_pct = pct;
-  row.net_band = pct === 100 ? "green" : pct >= 67 ? "amber" : "red";
-  row.net_reason = checks.filter(([k]) => !row[k]).map(([, l]) => l).join(", ");
+  // Base = sum of passed check weights (max 80). The frontend adds Design Quality
+  // (0-20 from Supabase) on top to get the final NET.
+  const base = WEIGHTED_CHECKS.reduce((s, [k, , wt]) => s + (row[k] ? wt : 0), 0);
+  row.net_base = base;
+  row.net_passed = base;
+  row.net_total = 100;
+  row.net_pct = base;          // provisional; frontend recomputes with DQ
+  row.net_band = base === 100 ? "green" : base >= 67 ? "amber" : "red";
+  row.net_reason = WEIGHTED_CHECKS.filter(([k]) => !row[k]).map(([, l]) => l).join(", ");
 }
 
 function buildSummary(rows) {
@@ -470,7 +459,7 @@ async function projectMeta(db, ids) {
 
 async function notesByProject(db, ids) {
   const r = await db.query(
-    `SELECT notable_id, subject, content FROM notes
+    `SELECT notable_id, subject, title, content FROM notes
      WHERE notable_type = 'Project' AND notable_id = ANY($1::bigint[])`,
     [ids]
   );
@@ -478,10 +467,13 @@ async function notesByProject(db, ids) {
   for (const n of r.rows) {
     (out[n.notable_id] ||= []).push({
       subject: n.subject || "",
+      title: n.title || "",
       text_len: stripHtml(n.content).length,
       rec: hasRecordingLink(n.content),
-      dcm_rec: hasDcmRecording(n.content, n.subject),
-      cdp_rec: hasCdpRecording(n.content, n.subject),
+      dcm_rec: hasDcmRecording(n.content, n.subject, n.title),
+      cdp_rec: hasCdpRecording(n.content, n.subject, n.title),
+      is_cdp_note: tagIsCdp(n.subject, n.title),
+      is_dcm_note: tagIsDcm(n.subject, n.title),
     });
   }
   return out;
