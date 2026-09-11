@@ -93,7 +93,9 @@
   #cdp-exec .tbl-head .meta{ font-size:12px; color:var(--muted); }
   #cdp-exec .tbl-scroll{ overflow:auto; max-height:70vh; }
   #cdp-exec table.ct{ width:100%; border-collapse:separate; border-spacing:0; font-size:12px; }
-  #cdp-exec table.ct th{ background:#0e3b36; color:#eaf3f1; padding:10px 8px; text-align:left; font-weight:600; font-size:10.5px; text-transform:uppercase; letter-spacing:.03em; white-space:nowrap; position:sticky; top:0; z-index:3; }
+  #cdp-exec table.ct th{ background:#0e3b36; color:#eaf3f1; padding:9px 8px; text-align:left; font-weight:600; font-size:11px; letter-spacing:.01em; white-space:normal; line-height:1.25; vertical-align:bottom; max-width:80px; position:sticky; top:0; z-index:3; }
+  #cdp-exec table.ct th.sticky{ white-space:nowrap; }
+  #cdp-exec table.ct th.oc-col{ max-width:70px; }
   #cdp-exec table.ct th.sticky, #cdp-exec table.ct td.sticky{ position:sticky; left:0; z-index:2; }
   #cdp-exec table.ct th.sticky{ z-index:4; }
   #cdp-exec table.ct td{ padding:8px; border-bottom:1px solid #f0f4f3; white-space:nowrap; color:#27332f; }
@@ -111,6 +113,17 @@
   #cdp-exec .yn-yes{ color:var(--good); font-weight:600; } #cdp-exec .yn-no{ color:var(--bad); font-weight:600; }
   #cdp-exec .pdf-link{ color:var(--teal); text-decoration:none; font-weight:600; }
   #cdp-exec .extra{ display:none; } #cdp-exec.show-dm .extra{ display:table-cell; }
+  #cdp-exec .dqx{ display:none; } #cdp-exec.show-dq .dqx{ display:table-cell; }
+  #cdp-exec .dq-total{ font-variant-numeric:tabular-nums; }
+  #cdp-exec .dq-unrated{ color:var(--muted); }
+  #cdp-exec .dq-p{ font-family:inherit; font-size:12px; padding:2px 3px; border:1px solid var(--line); border-radius:5px; background:#fff; cursor:pointer; }
+  #cdp-exec .dq-remarks{ font-family:inherit; font-size:11.5px; padding:3px 7px; border:1px solid var(--line); border-radius:5px; width:150px; }
+  #cdp-exec .dq-save{ font-family:inherit; font-size:11px; font-weight:600; padding:4px 11px; border:none; border-radius:6px; background:var(--teal); color:#fff; cursor:pointer; }
+  #cdp-exec .kpi .lvb{ display:flex; align-items:baseline; justify-content:space-between; gap:8px; margin-top:5px; }
+  #cdp-exec .kpi .lvb-name{ font-size:15px; font-weight:600; }
+  #cdp-exec .kpi .lvb-pct{ font-size:13px; font-weight:600; font-variant-numeric:tabular-nums; }
+  #cdp-exec .dq-legend{ margin:14px 0 0; font-size:11.5px; color:var(--ink2); background:var(--card); border:1px solid var(--line); border-radius:10px; padding:11px 14px; }
+  #cdp-exec .dq-legend b{ color:var(--teal); }
   #cdp-exec .empty{ padding:50px; text-align:center; color:var(--muted); font-size:14px; }
   #cdp-exec .notice{ background:#fdf6e3; border:1px solid #f0e0a8; color:#7a5c14; border-radius:10px; padding:13px 16px; margin-bottom:18px; font-size:13px; }
   #cdp-exec .loading{ padding:60px; text-align:center; color:var(--muted); font-size:14px; }
@@ -180,12 +193,18 @@
 
     <!-- ===================== OVERVIEW ===================== -->
     <div id="v-overview">
-      <div style="margin:0 0 14px"><p class="eyebrow">CDP Compliance &middot; Executive View</p></div>
+      <div style="margin:0 0 14px;display:flex;align-items:center;justify-content:space-between">
+        <p class="eyebrow">CDP Compliance &middot; Executive View</p>
+        <button type="button" class="btn btn-ghost" id="png-overview" onclick="cdpDownloadPNG('overview')">&darr; PNG</button>
+      </div>
       <div class="kpis">
         <div class="kpi"><p class="lab">Presentations Reviewed</p><div class="val" id="k-total">0</div><div class="foot" id="k-total-foot"></div></div>
         <div class="kpi"><p class="lab">Avg Compliance</p><div class="val" id="k-avg">0%</div><div class="foot">across selected filters</div></div>
         <div class="kpi"><p class="lab">Fully Compliant</p><div class="val" id="k-full">0</div><div class="foot" id="k-full-foot"></div></div>
-        <div class="kpi"><p class="lab">Lowest Parameter</p><div class="val" id="k-low" style="font-size:22px;color:var(--bad)">-</div><div class="foot" id="k-low-foot"></div></div>
+        <div class="kpi"><p class="lab">Lowest vs Best Parameter</p>
+          <div class="lvb"><span class="lvb-name" id="k-low" style="color:var(--bad)">-</span><span class="lvb-pct" id="k-low-pct" style="color:var(--bad)"></span></div>
+          <div class="lvb"><span class="lvb-name" id="k-best" style="color:var(--good)">-</span><span class="lvb-pct" id="k-best-pct" style="color:var(--good)"></span></div>
+        </div>
       </div>
 
       <div class="grid">
@@ -226,7 +245,9 @@
           <button type="button" class="btn btn-ghost" id="uni-clear">Clear</button>
         </div>
         <div class="spacer"></div>
+        <button type="button" class="btn btn-ghost" id="toggle-dq">+ Show Design Quality</button>
         <button type="button" class="btn btn-ghost" id="toggle-dm">+ Show DM scores &amp; details</button>
+        <button type="button" class="btn btn-ghost" id="png-detailed" onclick="cdpDownloadPNG('detailed')">&darr; PNG</button>
         <button type="button" class="btn btn-ghost" id="csv-link">&darr; CSV</button>
       </div>
 
@@ -245,10 +266,12 @@
         <div class="tbl-scroll" id="cdp-table-wrap">
           <table class="ct">
             <thead><tr>
-              <th class="sticky">PID</th><th>CX Name</th><th>Branch</th><th>Status</th><th>Net Designer</th><th>Net DM</th><th>CDP Date</th>
+              <th class="sticky">PID</th><th>Client Name</th><th>Branch</th><th>Net Designer</th><th>Net DM</th><th>CDP Date</th>
               <th>Gross Budget</th><th>CDP Budget</th>
-              <th>RGM/DCM</th><th>RGM Rec.</th><th>CDP Notes</th><th>CDP Rec.</th><th>CDD Form</th><th>CDP PDF</th>
-              <th>DM Review</th><th>AI CDP</th><th>Sentiment</th><th>NET</th>
+              <th>CDD Form (12%)</th><th>RGM (12%)</th><th>RGM Rec. (15%)</th><th>CDP Notes (11%)</th><th>CDP Rec. (15%)</th>
+              <th>DM Review (15%)</th><th>Design Quality (20%)</th>
+              <th class="dqx">A</th><th class="dqx">B</th><th class="dqx">C</th><th class="dqx">D</th><th class="dqx">E</th><th class="dqx">Remarks</th><th class="dqx"> </th>
+              <th class="oc-col">Overall Compliance</th>
               <th class="extra">DM: Cust Req</th><th class="extra">DM: Theme</th><th class="extra">DM: Spatial</th><th class="extra">DM: Render</th><th class="extra">DM: Variants</th>
               <th class="extra">Reason</th>
             </tr></thead>
@@ -259,13 +282,14 @@
         <div class="tbl-scroll" id="ms-table-wrap" style="display:none">
           <table class="ct">
             <thead><tr>
-              <th class="sticky">PID</th><th>CX Name</th><th>Branch</th><th>Status</th><th>Milestone Designer</th><th>Milestone DM</th>
-              <th>DEM-1</th><th>DEM-2</th><th>DEM-3</th><th>DEM %</th>
+              <th class="sticky">PID</th><th>Client Name</th><th>Branch</th><th>Milestone Designer</th><th>Milestone DM</th>
+              <th>Initial Site Measurement</th><th>DEM-1(rec)</th><th>DEM-2(rec)</th><th>DEM-3(rec)</th><th>VM Notes</th><th>DEM %</th>
             </tr></thead>
             <tbody id="ms-rows-body"></tbody>
           </table>
         </div>
       </div>
+      <p class="dq-legend"><b>Design Quality (A-E, each rated 0-4, max 20 = 20%):</b> &nbsp; <b>A</b> Customer delight through design &nbsp;&middot;&nbsp; <b>B</b> Render quality &nbsp;&middot;&nbsp; <b>C</b> Space planning &nbsp;&middot;&nbsp; <b>D</b> Theme compliance &nbsp;&middot;&nbsp; <b>E</b> DM review standard</p>
     </div>
 
   </div>
@@ -290,7 +314,27 @@
   function driveUrl(r){ return r.id ? PURL + '/' + encodeURIComponent(r.id) + '/drive' : null; }
   function formUrl(rid){ return rid ? FORM_BASE + '/' + encodeURIComponent(rid) : null; }
   var API = "/api/cdp";
-  var PARAMS = [["rgm_notes","RGM/DCM Notes"],["rgm_rec","RGM Recording"],["cdp_notes","CDP Notes"],["cdp_rec","CDP Recording"],["cdd_form","CDD Form"],["cdp_pdf","CDP PDF"],["dm_review","DM Review"]];
+  var PARAMS = [["cdd_form","CDD Form"],["rgm_notes","RGM"],["rgm_rec","RGM Recording"],["cdp_rec","CDP Recording"],["cdp_notes","CDP Notes"],["dm_review","DM Review"]];
+
+  // ---- Design Quality store (Supabase) - shared with the app.bonito version ----
+  var SUPA_URL = "https://aaazortuniwxkanrfonb.supabase.co";
+  var SUPA_KEY = "sb_publishable_olehawTUP3v2e9XXK8s3rA_dWbnXguz";
+  var SUPA_TBL = SUPA_URL + "/rest/v1/design_quality";
+  var SUPA_HEADERS = { "apikey": SUPA_KEY, "Authorization": "Bearer " + SUPA_KEY, "Content-Type": "application/json" };
+  var DQ_KEYS = ['a','b','c','d','e'];
+  var DQ_BY_PID = {};
+  function dqTotal(dq){ if(!dq) return null; var any=false,sum=0; DQ_KEYS.forEach(function(k){ var v=dq[k]; if(v!==null&&v!==undefined&&v!==''){any=true;sum+=(parseInt(v,10)||0);} }); return any?sum:null; }
+  function applyDQtoRow(row){ var base=row.net_base||0; var t=dqTotal(row.dq); row.dq_pct=(t===null)?0:t; row.net_pct=base+row.dq_pct; row.net_band=row.net_pct===100?'green':(row.net_pct>=67?'amber':'red'); }
+  function loadDesignQuality(){
+    return fetch(SUPA_TBL+"?select=project_no,a,b,c,d,e,remarks",{headers:SUPA_HEADERS})
+      .then(function(r){return r.ok?r.json():[];})
+      .then(function(list){ DQ_BY_PID={}; (list||[]).forEach(function(x){ DQ_BY_PID[String(x.project_no)]={a:x.a,b:x.b,c:x.c,d:x.d,e:x.e,remarks:x.remarks}; });
+        (ALL||[]).forEach(function(row){ row.dq=DQ_BY_PID[String(row.pid)]||null; applyDQtoRow(row); }); })
+      .catch(function(){});
+  }
+  // Short branch: HSR / HRBR / Thane / Andheri (MUM-GOR = Andheri).
+  function shortBranch(b){ var s=(b||'').toString(); if(/hsr/i.test(s))return'HSR'; if(/hrbr/i.test(s))return'HRBR'; if(/thane/i.test(s))return'Thane'; if(/andheri/i.test(s)||/gor/i.test(s))return'Andheri'; return s; }
+  function dateOnly(dt){ return (dt||'-').toString().split(' ')[0] || '-'; }
 
   var ALL = [];
   var selEC=new Set(), selCDPDM=new Set(), selMSDM=new Set(), selDSG=new Set();
@@ -300,15 +344,17 @@
 
   // ---- normalize a server row to the shape the UI expects ----
   function normalize(r){
-    return { pid:String(r.project_no||''), id:r.project_id||'', cx:r.cx_name||'', branch:r.branch||'', designer:r.designer||'', dm:r.design_manager||'',
+    var o = { pid:String(r.project_no||''), id:r.project_id||'', cx:r.cx_name||'', branch:shortBranch(r.branch||''), designer:r.designer||'', dm:r.design_manager||'',
       ms_designer:r.ms_designer||'', ms_dm:r.ms_design_manager||'',
-      dem1:!!r.dem1_ok, dem2:!!r.dem2_ok, dem3:!!r.dem3_ok, dem_dates:r.dem_dates||{}, dem_pct:r.dem_pct||0, dem_band:r.dem_band||'red',
-      cdp_date:r.cdp_date||'', net_pct:r.net_pct||0, net_band:r.net_band||'red', status:r.project_status||'',
-      gross:r.gross_budget||'', cdp_budget:r.cdp_budget||'', pdf_ok:!!r.cdp_pdf_ok, pdf_name:r.cdp_pdf_filename||'', reason:r.net_reason||'',
+      dem1:!!r.dem1_ok, dem2:!!r.dem2_ok, dem3:!!r.dem3_ok, ism:!!r.ism_ok, cm:!!r.cm_ok, dem_dates:r.dem_dates||{}, dem_pct:r.dem_pct||0, dem_band:r.dem_band||'red',
+      cdp_date:r.cdp_date||'', net_base:r.net_base||0, net_pct:r.net_pct||0, net_band:r.net_band||'red', status:r.project_status||'',
+      gross:r.gross_budget||'', cdp_budget:r.cdp_budget||'', reason:r.net_reason||'',
       cdd_rid:r.cdd_rid||null, dmr_rid:r.dmr_rid||null,
       dm_scores:r.dm_scores||{},
-      ai_applies:!!r.ai_applies, ai_ready:!!r.ai_cdp_ready, ai_summary:r.ai_summary||'', ai_sentiment:r.ai_sentiment||'', ai_mtg:r.ai_meeting_date||'',
-      checks:{ rgm_notes:r.rgm_notes_ok?1:0, rgm_rec:r.rgm_recording_ok?1:0, cdp_notes:r.cdp_notes_ok?1:0, cdp_rec:r.cdp_recording_ok?1:0, cdd_form:r.cdd_form_ok?1:0, cdp_pdf:r.cdp_pdf_ok?1:0, dm_review:r.dm_review_ok?1:0 } };
+      dq: DQ_BY_PID[String(r.project_no||'')] || null,
+      checks:{ rgm_notes:r.rgm_notes_ok?1:0, rgm_rec:r.rgm_recording_ok?1:0, cdp_notes:r.cdp_notes_ok?1:0, cdp_rec:r.cdp_recording_ok?1:0, cdd_form:r.cdd_form_ok?1:0, dm_review:r.dm_review_ok?1:0 } };
+    applyDQtoRow(o);
+    return o;
   }
 
   // ---- helpers ----
@@ -380,7 +426,8 @@
     document.getElementById('k-full-foot').textContent = rows.length? Math.round(full*100/rows.length)+'% hit all seven checks':'';
     var pv = PARAMS.map(function(p){ var k=p[0]; return [p[1], rows.length? Math.round(rows.reduce(function(s,r){return s+r.checks[k];},0)*100/rows.length):0]; });
     pv.sort(function(x,y){return x[1]-y[1];});
-    if (pv.length){ document.getElementById('k-low').textContent = pv[0][0]; document.getElementById('k-low-foot').textContent = pv[0][1]+'% pass rate \u00b7 needs action'; }
+    if (pv.length){ document.getElementById('k-low').textContent = pv[0][0]; document.getElementById('k-low-pct').textContent = pv[0][1]+'%';
+      var best=pv[pv.length-1]; document.getElementById('k-best').textContent = best[0]; document.getElementById('k-best-pct').textContent = best[1]+'%'; }
 
     Chart.defaults.font.family="'Inter',sans-serif"; Chart.defaults.font.size=11.5; Chart.defaults.color='#7d928d';
     Object.values(charts).forEach(function(c){ try{c.destroy();}catch(e){} });
@@ -498,26 +545,41 @@
   };
   window.cdpCloseAI=function(){ document.getElementById('ai-overlay').style.display='none'; };
 
+  // Design Quality cells
+  function dqCell(r){ var t=dqTotal(r.dq); return '<span class="dq-total">'+(t===null?'<span class="dq-unrated">-</span>':('<b>'+t+'%</b>'))+'</span>'; }
+  function dqParamCell(r,key){ var dq=r.dq||{}; var cur=(dq[key]===null||dq[key]===undefined||dq[key]==='')?'':String(dq[key]); var opts='<option value=""'+(cur===''?' selected':'')+'>-</option>'; for(var i=0;i<=4;i++){opts+='<option value="'+i+'"'+(cur===String(i)?' selected':'')+'>'+i+'</option>';} return '<select class="dq-p" data-pid="'+esc(r.pid)+'" data-k="'+key+'">'+opts+'</select>'; }
+  function dqRemarksCell(r){ var dq=r.dq||{}; var val=(dq.remarks||'').replace(/"/g,'&quot;'); return '<input class="dq-remarks" data-pid="'+esc(r.pid)+'" value="'+val+'" placeholder="Add remarks\u2026">'; }
+  function dqSaveCell(r){ return '<button type="button" class="dq-save" data-pid="'+esc(r.pid)+'" onclick="cdpSaveDQ(this)">Save</button>'; }
+  window.cdpSaveDQ=function(btn){
+    var pid=btn.getAttribute('data-pid'); var rowEl=btn.closest('tr');
+    var payload={project_no:parseInt(pid,10),updated_at:new Date().toISOString()};
+    DQ_KEYS.forEach(function(k){ var sel=rowEl.querySelector('.dq-p[data-k="'+k+'"]'); payload[k]=(sel&&sel.value!=='')?parseInt(sel.value,10):null; });
+    var rem=rowEl.querySelector('.dq-remarks'); payload.remarks=rem?(rem.value||null):null;
+    btn.disabled=true; btn.textContent='Saving\u2026';
+    fetch(SUPA_TBL+"?on_conflict=project_no",{method:"POST",headers:Object.assign({},SUPA_HEADERS,{"Prefer":"resolution=merge-duplicates,return=minimal"}),body:JSON.stringify(payload)})
+      .then(function(res){ btn.disabled=false; btn.textContent='Save';
+        if(!(res.status>=200&&res.status<300)){ return res.text().then(function(t){ alert('Could not save Design Quality: '+(t||('HTTP '+res.status))); }); }
+        var dqObj={a:payload.a,b:payload.b,c:payload.c,d:payload.d,e:payload.e,remarks:payload.remarks};
+        DQ_BY_PID[String(pid)]=dqObj; var row=findRow(pid); if(row){ row.dq=dqObj; applyDQtoRow(row); }
+        btn.textContent='Saved'; setTimeout(function(){btn.textContent='Save';},1200);
+        renderDetailed(); renderOverview();
+      }).catch(function(e){ btn.disabled=false; btn.textContent='Save'; alert('Save failed: '+e.message); });
+  };
   function rowHtml(r){
     var d=r.dm_scores||{};
-    // PDF -> Pulse /drive (Files view).
-    var durl=driveUrl(r);
-    var pdf = r.checks.cdp_pdf
-      ? (durl ? '<a class="pdf-link" href="'+durl+'" target="_blank" title="'+esc(r.pdf_name||'CDP PDF')+'">Present</a>' : '<span class="yn-yes">Present</span>')
-      : '<span class="yn-no">None</span>';
     return '<tr>'+
       '<td class="sticky">'+esc(r.pid)+'</td>'+
-      '<td>'+esc(r.cx)+'</td><td>'+esc(r.branch)+'</td><td><span class="pill">'+esc(r.status)+'</span></td><td>'+esc(r.designer)+'</td><td>'+(esc(r.dm)||'\u2014')+'</td><td>'+(esc(r.cdp_date)||'\u2014')+'</td>'+
+      '<td>'+esc(r.cx)+'</td><td>'+esc(r.branch)+'</td><td>'+esc(r.designer)+'</td><td>'+(esc(r.dm)||'\u2014')+'</td><td>'+esc(dateOnly(r.cdp_date))+'</td>'+
       '<td>'+(esc(r.gross)||'\u2014')+'</td><td>'+(esc(r.cdp_budget)||'\u2014')+'</td>'+
+      '<td class="cc">'+formCell(r.checks.cdd_form,r.cdd_rid,'Open CDD form response')+'</td>'+
       '<td class="cc">'+notesCell(r.checks.rgm_notes,r)+'</td>'+
       '<td class="cc">'+notesCell(r.checks.rgm_rec,r)+'</td>'+
       '<td class="cc">'+notesCell(r.checks.cdp_notes,r)+'</td>'+
       '<td class="cc">'+notesCell(r.checks.cdp_rec,r)+'</td>'+
-      '<td class="cc">'+formCell(r.checks.cdd_form,r.cdd_rid,'Open CDD form response')+'</td>'+
-      '<td class="cc">'+pdf+'</td>'+
       '<td class="cc">'+formCell(r.checks.dm_review,r.dmr_rid,'Open DM review form response')+'</td>'+
-      '<td class="cc">'+aiCell(r)+'</td>'+
-      '<td class="cc">'+sentimentCell(r)+'</td>'+
+      '<td class="cc">'+dqCell(r)+'</td>'+
+      '<td class="cc dqx">'+dqParamCell(r,'a')+'</td><td class="cc dqx">'+dqParamCell(r,'b')+'</td><td class="cc dqx">'+dqParamCell(r,'c')+'</td><td class="cc dqx">'+dqParamCell(r,'d')+'</td><td class="cc dqx">'+dqParamCell(r,'e')+'</td>'+
+      '<td class="dqx">'+dqRemarksCell(r)+'</td><td class="cc dqx">'+dqSaveCell(r)+'</td>'+
       '<td class="net net-'+r.net_band+'">'+r.net_pct+'%</td>'+
       '<td class="extra">'+(esc(d.customer_requirement)||'\u2014')+'</td><td class="extra">'+(esc(d.theme)||'\u2014')+'</td><td class="extra">'+(esc(d.spatial_planning)||'\u2014')+'</td><td class="extra">'+(esc(d.render)||'\u2014')+'</td><td class="extra">'+(esc(d.quotation_variants)||'\u2014')+'</td>'+
       '<td class="extra" style="white-space:normal;max-width:220px;font-size:11px">'+(esc(r.reason)||'\u2014')+'</td>'+
@@ -533,11 +595,13 @@
     var dd=r.dem_dates||{};
     return '<tr>'+
       '<td class="sticky">'+esc(r.pid)+'</td>'+
-      '<td>'+esc(r.cx)+'</td><td>'+esc(r.branch)+'</td><td><span class="pill">'+esc(r.status)+'</span></td>'+
+      '<td>'+esc(r.cx)+'</td><td>'+esc(r.branch)+'</td>'+
       '<td>'+(esc(r.ms_designer)||'\u2014')+'</td><td>'+(esc(r.ms_dm)||'\u2014')+'</td>'+
-      '<td class="cc">'+demCell(r.dem1, dd['DEM-1'])+'</td>'+
-      '<td class="cc">'+demCell(r.dem2, dd['DEM-2'])+'</td>'+
-      '<td class="cc">'+demCell(r.dem3, dd['DEM-3'])+'</td>'+
+      '<td class="cc">'+demCell(r.ism, dd['Initial Site Measurement'])+'</td>'+
+      '<td class="cc">'+demCell(r.dem1, dd['DEM-1(rec)'])+'</td>'+
+      '<td class="cc">'+demCell(r.dem2, dd['DEM-2(rec)'])+'</td>'+
+      '<td class="cc">'+demCell(r.dem3, dd['DEM-3(rec)'])+'</td>'+
+      '<td class="cc">'+demCell(r.cm, dd['VM Notes'])+'</td>'+
       '<td class="net net-'+(r.dem_band||'red')+'">'+(r.dem_pct||0)+'%</td>'+
     '</tr>';
   }
@@ -549,8 +613,8 @@
   };
   function renderDetailed(){
     var rows = searchRows !== null ? searchRows : filtered();
-    document.getElementById('rows-body').innerHTML = rows.length ? rows.map(rowHtml).join('') : '<tr><td colspan="24" class="empty">No projects match.</td></tr>';
-    document.getElementById('ms-rows-body').innerHTML = rows.length ? rows.map(msRowHtml).join('') : '<tr><td colspan="10" class="empty">No projects match.</td></tr>';
+    document.getElementById('rows-body').innerHTML = rows.length ? rows.map(rowHtml).join('') : '<tr><td colspan="29" class="empty">No projects match.</td></tr>';
+    document.getElementById('ms-rows-body').innerHTML = rows.length ? rows.map(msRowHtml).join('') : '<tr><td colspan="11" class="empty">No projects match.</td></tr>';
     document.getElementById('d-count').textContent = rows.length;
     document.getElementById('search-note').innerHTML = searchRows!==null ? '&middot; universal search (all dates)' : '';
   }
@@ -561,15 +625,15 @@
   document.getElementById('uni-clear').addEventListener('click', function(){ document.getElementById('uni-search').value=''; searchRows=null; renderDetailed(); });
   function doSearch(){
     var q=document.getElementById('uni-search').value.trim(); if(!q) return;
-    var body=document.getElementById('rows-body'); body.innerHTML='<tr><td colspan="25" style="padding:24px;text-align:center;color:var(--muted)">Searching\u2026</td></tr>';
+    var body=document.getElementById('rows-body'); body.innerHTML='<tr><td colspan="29" style="padding:24px;text-align:center;color:var(--muted)">Searching\u2026</td></tr>';
     fetch(API+'?pid='+encodeURIComponent(q))
       .then(function(r){return r.json();})
       .then(function(d){
-        if(!d.rows || !d.rows.length){ body.innerHTML='<tr><td colspan="25" style="padding:24px;text-align:center;color:var(--muted)">No matching PIDs found</td></tr>'; searchRows=[]; document.getElementById('d-count').textContent=0; return; }
+        if(!d.rows || !d.rows.length){ body.innerHTML='<tr><td colspan="29" style="padding:24px;text-align:center;color:var(--muted)">No matching PIDs found</td></tr>'; searchRows=[]; document.getElementById('d-count').textContent=0; return; }
         searchRows = d.rows.map(normalize);
         renderDetailed();
       })
-      .catch(function(){ body.innerHTML='<tr><td colspan="25" style="padding:24px;text-align:center;color:var(--bad)">Search failed</td></tr>'; });
+      .catch(function(){ body.innerHTML='<tr><td colspan="29" style="padding:24px;text-align:center;color:var(--bad)">Search failed</td></tr>'; });
   }
 
   // ---- DM columns toggle ----
@@ -577,20 +641,49 @@
     var root=document.getElementById('cdp-exec'); var on=root.classList.toggle('show-dm');
     this.textContent = on ? '\u2212 Hide DM scores & details' : '+ Show DM scores & details';
   });
+  document.getElementById('toggle-dq').addEventListener('click', function(){
+    var root=document.getElementById('cdp-exec'); var on=root.classList.toggle('show-dq');
+    this.textContent = on ? '\u2212 Hide Design Quality' : '+ Show Design Quality';
+  });
+
+  // ---- PNG download (html2canvas) ----
+  window.cdpDownloadPNG=function(which){
+    var el = document.getElementById(which==='overview' ? 'v-overview' : 'v-detailed');
+    if(!el){ return; }
+    function grab(){
+      window.html2canvas(el, {backgroundColor:'#ffffff', scale:2, useCORS:true, windowWidth:el.scrollWidth+40})
+        .then(function(canvas){
+          var a=document.createElement('a');
+          a.href=canvas.toDataURL('image/png');
+          a.download='cdp_'+which+'_'+(new Date().toISOString().slice(0,10))+'.png';
+          a.click();
+        }).catch(function(e){ alert('Could not generate image: '+e.message); });
+    }
+    if(window.html2canvas){ grab(); }
+    else {
+      var s=document.createElement('script');
+      s.src='https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js';
+      s.onload=grab; s.onerror=function(){ alert('Could not load the image library (check network).'); };
+      document.head.appendChild(s);
+    }
+  };
 
   // ---- CSV export (client-side, from whatever rows are in view) ----
   document.getElementById('csv-link').addEventListener('click', function(){
     var rows = searchRows !== null ? searchRows : filtered();
-    var head = ["PID","CX Name","Branch","Status","Designer","Design Manager","CDP Date","Gross Budget","CDP Budget",
-      "RGM/DCM Notes","RGM Recording","CDP Notes","CDP Recording","CDD Form","CDP PDF","DM Review",
-      "DM:CustReq","DM:Theme","DM:Spatial","DM:Render","DM:Variants","NET %","Missing"];
+    var head = ["PID","Client Name","Branch","Designer","Design Manager","CDP Date","Gross Budget","CDP Budget",
+      "CDD Form","RGM","RGM Recording","CDP Notes","CDP Recording","DM Review",
+      "DQ-A","DQ-B","DQ-C","DQ-D","DQ-E","Design Quality %","DQ Remarks",
+      "DM:CustReq","DM:Theme","DM:Spatial","DM:Render","DM:Variants","Overall Compliance %","Base %","Missing"];
     function yn(v){return v?"Yes":"No";}
     function q(v){ v=String(v==null?'':v); return /[",\n]/.test(v)?'"'+v.replace(/"/g,'""')+'"':v; }
     var lines=[head.join(",")];
-    rows.forEach(function(r){ var d=r.dm_scores||{};
-      lines.push([r.pid,r.cx,r.branch,r.status,r.designer,r.dm,r.cdp_date,r.gross,r.cdp_budget,
-        yn(r.checks.rgm_notes),yn(r.checks.rgm_rec),yn(r.checks.cdp_notes),yn(r.checks.cdp_rec),yn(r.checks.cdd_form),yn(r.checks.cdp_pdf),yn(r.checks.dm_review),
-        d.customer_requirement,d.theme,d.spatial_planning,d.render,d.quotation_variants,r.net_pct+'%',r.reason].map(q).join(","));
+    rows.forEach(function(r){ var d=r.dm_scores||{}, dq=r.dq||{}; var t=dqTotal(r.dq);
+      var dqv=function(k){return (dq[k]===null||dq[k]===undefined||dq[k]==='')?'':dq[k];};
+      lines.push([r.pid,r.cx,r.branch,r.designer,r.dm,dateOnly(r.cdp_date),r.gross,r.cdp_budget,
+        yn(r.checks.cdd_form),yn(r.checks.rgm_notes),yn(r.checks.rgm_rec),yn(r.checks.cdp_notes),yn(r.checks.cdp_rec),yn(r.checks.dm_review),
+        dqv('a'),dqv('b'),dqv('c'),dqv('d'),dqv('e'),(t===null?'':t+'%'),(dq.remarks||''),
+        d.customer_requirement,d.theme,d.spatial_planning,d.render,d.quotation_variants,r.net_pct+'%',(r.net_base||0)+'%',r.reason].map(q).join(","));
     });
     var blob=new Blob([lines.join("\n")],{type:"text/csv"});
     var a=document.createElement("a"); a.href=URL.createObjectURL(blob);
@@ -621,18 +714,22 @@
     var from=document.getElementById('f-from').value, to=document.getElementById('f-to').value;
     var mc=document.getElementById('f-minchars').value||100;
     document.getElementById('notice-slot').innerHTML='';
-    document.getElementById('rows-body').innerHTML='<tr><td colspan="25" class="loading">Loading\u2026</td></tr>';
+    document.getElementById('rows-body').innerHTML='<tr><td colspan="29" class="loading">Loading\u2026</td></tr>';
     var url=API+'?from='+from+'&to='+to+'&min_chars='+encodeURIComponent(mc);
     fetch(url).then(function(r){return r.json();}).then(function(d){
       if(d.error){ document.getElementById('notice-slot').innerHTML='<div class="notice">Error loading data: '+esc(d.error)+'</div>'; return; }
-      if(d.too_many){ document.getElementById('notice-slot').innerHTML='<div class="notice">Found <strong>'+d.summary.total_found+'</strong> projects. Narrow the date range or filters to load the dashboard.</div>'; ALL=[]; }
-      else { ALL=(d.rows||[]).map(normalize); }
-      searchRows=null;
-      selEC.clear(); selCDPDM.clear(); selMSDM.clear(); selDSG.clear();
-      rebuildFilters();
-      document.getElementById('hdr-range').textContent = fmtPretty(d.from||from, d.to||to);
-      document.getElementById('hdr-count').textContent = ALL.length;
-      renderOverview(); renderDetailed();
+      var rawRows = d.too_many ? [] : (d.rows||[]);
+      if(d.too_many){ document.getElementById('notice-slot').innerHTML='<div class="notice">Found <strong>'+d.summary.total_found+'</strong> projects. Narrow the date range or filters to load the dashboard.</div>'; }
+      // Load Design Quality from Supabase first, then normalize so scores apply.
+      loadDesignQuality().then(function(){
+        ALL = rawRows.map(normalize);
+        searchRows=null;
+        selEC.clear(); selCDPDM.clear(); selMSDM.clear(); selDSG.clear();
+        rebuildFilters();
+        document.getElementById('hdr-range').textContent = fmtPretty(d.from||from, d.to||to);
+        document.getElementById('hdr-count').textContent = ALL.length;
+        renderOverview(); renderDetailed();
+      });
     }).catch(function(e){
       document.getElementById('notice-slot').innerHTML='<div class="notice">Could not reach the data function. '+esc(e.message)+'</div>';
     });
