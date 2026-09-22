@@ -71,6 +71,8 @@
   #cdp-exec .panel{ background:var(--card); border:1px solid var(--line); border-radius:14px; padding:20px 22px; }
   #cdp-exec .panel h3{ font-size:14px; font-weight:600; margin:0 0 2px; }
   #cdp-exec .panel .psub{ font-size:11.5px; color:var(--muted); margin:0 0 16px; }
+  #cdp-exec .panel-head{ display:flex; align-items:flex-start; justify-content:space-between; gap:10px; }
+  #cdp-exec .trend-mode{ font-family:inherit; font-size:11.5px; padding:4px 8px; border:1px solid var(--line); border-radius:7px; background:#fff; color:var(--ink); cursor:pointer; flex-shrink:0; }
   #cdp-exec .box{ position:relative; height:250px; } #cdp-exec .box.sm{ height:230px; }
   #cdp-exec .rank{ display:flex; flex-direction:column; gap:11px; }
   #cdp-exec .rrow{ display:grid; grid-template-columns:120px 1fr 44px; align-items:center; gap:12px; }
@@ -93,7 +95,15 @@
   #cdp-exec .tbl-head .meta{ font-size:12px; color:var(--muted); }
   #cdp-exec .tbl-scroll{ overflow:auto; max-height:70vh; }
   #cdp-exec table.ct{ width:100%; border-collapse:separate; border-spacing:0; font-size:12px; }
-  #cdp-exec table.ct th{ background:#0e3b36; color:#eaf3f1; padding:9px 8px; text-align:left; font-weight:600; font-size:11px; letter-spacing:.01em; white-space:normal; line-height:1.25; vertical-align:bottom; max-width:80px; position:sticky; top:0; z-index:3; }
+  #cdp-exec table.ct th{ background:#0e3b36; color:#eaf3f1; padding:9px 8px; text-align:center; font-weight:600; font-size:11px; letter-spacing:.01em; white-space:normal; line-height:1.25; vertical-align:middle; max-width:80px; position:sticky; top:0; z-index:3; }
+  #cdp-exec table.ct th.lcol{ text-align:left; }
+  /* weightage sub-row (grey) */
+  #cdp-exec table.ct tr.wrow th{ background:#eef2f1; color:#9aa6a2; font-weight:400; font-size:10px; padding:3px 8px; position:sticky; top:38px; z-index:2; }
+  /* green dot / red cross marks */
+  #cdp-exec .mk{ display:inline-flex; align-items:center; justify-content:center; text-decoration:none; }
+  #cdp-exec .dot-yes{ display:inline-block; width:10px; height:10px; border-radius:50%; background:#1a8a52; }
+  #cdp-exec .cross-no{ color:#c0392b; font-weight:700; font-size:14px; line-height:1; }
+  #cdp-exec a.mk:hover .dot-yes{ box-shadow:0 0 0 2px rgba(26,138,82,.25); }
   #cdp-exec table.ct th.sticky{ white-space:nowrap; }
   #cdp-exec table.ct th.oc-col{ max-width:70px; }
   #cdp-exec table.ct th.sticky, #cdp-exec table.ct td.sticky{ position:sticky; left:0; z-index:2; }
@@ -107,8 +117,8 @@
   #cdp-exec .cross{ color:var(--bad); font-weight:700; text-decoration:none; }
   #cdp-exec a.tick:hover, #cdp-exec a.cross:hover{ text-decoration:underline; }
   #cdp-exec td.cc{ text-align:center; }
-  #cdp-exec .net{ text-align:center; font-weight:700; color:#fff; }
-  #cdp-exec .net-green{ background:#0f7a4d; } #cdp-exec .net-amber{ background:#c07a1a; } #cdp-exec .net-red{ background:#b23b3b; }
+  #cdp-exec .net{ text-align:center; font-weight:700; }
+  #cdp-exec .net-green{ color:#0f7a4d; } #cdp-exec .net-amber{ color:#c07a1a; } #cdp-exec .net-red{ color:#c0392b; }
   #cdp-exec .pill{ display:inline-block; padding:2px 8px; border-radius:10px; font-size:11px; font-weight:500; background:#eef3f1; color:var(--ink2); }
   #cdp-exec .yn-yes{ color:var(--good); font-weight:600; } #cdp-exec .yn-no{ color:var(--bad); font-weight:600; }
   #cdp-exec .pdf-link{ color:var(--teal); text-decoration:none; font-weight:600; }
@@ -208,12 +218,18 @@
       </div>
 
       <div class="grid">
-        <div class="panel"><h3>Compliance by Experience Centre</h3><p class="psub">Average compliance across reviewed presentations</p><div class="box"><canvas id="c-ec"></canvas></div></div>
-        <div class="panel"><h3>Parameter Pass Rate</h3><p class="psub">Share of presentations meeting each check</p><div class="box"><canvas id="c-param"></canvas></div></div>
+        <div class="panel">
+          <div class="panel-head">
+            <div><h3>Compliance by Experience Centre</h3><p class="psub" id="ec-psub">Average compliance across reviewed presentations</p></div>
+            <select id="ec-trend-mode" class="trend-mode" onchange="renderOverview()"><option value="weekly">Weekly</option><option value="monthly">Monthly</option></select>
+          </div>
+          <div class="box"><canvas id="c-ec"></canvas></div>
+        </div>
+        <div class="panel"><h3>Compliance by Parameter</h3><p class="psub">Share of presentations meeting each check</p><div class="box"><canvas id="c-param"></canvas></div></div>
       </div>
       <div class="grid eq">
-        <div class="panel"><h3>CDP DMs - Ranked</h3><p class="psub">Average CDP compliance under each Net DM</p><div id="dm-rank" class="rank"></div></div>
-        <div class="panel"><h3>Compliance Trend</h3><p class="psub">Weekly average (week starting)</p><div class="box sm"><canvas id="c-trend"></canvas></div></div>
+        <div class="panel"><h3>DM Ranking</h3><p class="psub">Average CDP compliance under each Net DM</p><div id="dm-rank" class="rank"></div></div>
+        <div class="panel"><h3>Designer Ranking</h3><p class="psub">Average CDP compliance under each Net Designer</p><div id="dsg-rank" class="rank"></div></div>
       </div>
 
       <div style="margin:30px 0 14px;padding-top:22px;border-top:2px solid var(--line)">
@@ -265,16 +281,28 @@
 
         <div class="tbl-scroll" id="cdp-table-wrap">
           <table class="ct">
-            <thead><tr>
-              <th class="sticky">PID</th><th>Client Name</th><th>Branch</th><th>Net Designer</th><th>Net DM</th><th>CDP Date</th>
-              <th>Gross Budget</th><th>CDP Budget</th>
-              <th>CDD Form (12%)</th><th>RGM (12%)</th><th>RGM Rec. (15%)</th><th>CDP Notes (11%)</th><th>CDP Rec. (15%)</th>
-              <th>DM Review (15%)</th><th>Design Quality (20%)</th>
-              <th class="dqx">A</th><th class="dqx">B</th><th class="dqx">C</th><th class="dqx">D</th><th class="dqx">E</th><th class="dqx">Remarks</th><th class="dqx"> </th>
+            <thead>
+              <tr>
+              <th class="sticky lcol">PID</th><th class="lcol">Client Name</th><th class="lcol">Branch</th><th class="lcol">Net Designer</th><th class="lcol">Net DM</th><th class="lcol">CDP Date</th>
+              <th class="lcol">Gross Budget</th><th class="lcol">CDP Budget</th>
+              <th>CDD Form</th><th>RGM</th><th>RGM Rec.</th><th>CDP Notes</th><th>CDP Rec.</th>
+              <th>DM Review</th><th>Design Quality</th>
+              <th class="dqx">A</th><th class="dqx">B</th><th class="dqx">C</th><th class="dqx">D</th><th class="dqx">E</th><th class="dqx lcol">Remarks</th><th class="dqx"> </th>
               <th class="oc-col">Overall Compliance</th>
-              <th class="extra">DM: Cust Req</th><th class="extra">DM: Theme</th><th class="extra">DM: Spatial</th><th class="extra">DM: Render</th><th class="extra">DM: Variants</th>
-              <th class="extra">Reason</th>
-            </tr></thead>
+              <th class="extra lcol">DM: Cust Req</th><th class="extra">DM: Theme</th><th class="extra">DM: Spatial</th><th class="extra">DM: Render</th><th class="extra">DM: Variants</th>
+              <th class="extra lcol">Reason</th>
+              </tr>
+              <tr class="wrow">
+              <th></th><th></th><th></th><th></th><th></th><th></th>
+              <th></th><th></th>
+              <th>12%</th><th>12%</th><th>15%</th><th>11%</th><th>15%</th>
+              <th>15%</th><th>20%</th>
+              <th class="dqx"></th><th class="dqx"></th><th class="dqx"></th><th class="dqx"></th><th class="dqx"></th><th class="dqx"></th><th class="dqx"></th>
+              <th></th>
+              <th class="extra"></th><th class="extra"></th><th class="extra"></th><th class="extra"></th><th class="extra"></th>
+              <th class="extra"></th>
+              </tr>
+            </thead>
             <tbody id="rows-body"></tbody>
           </table>
         </div>
@@ -415,6 +443,7 @@
   }
 
   // ---- OVERVIEW render ----
+  window.renderOverview = renderOverview;
   function renderOverview(){
     var rows = filtered();
     document.getElementById('k-total').textContent = rows.length;
@@ -432,42 +461,67 @@
     Chart.defaults.font.family="'Inter',sans-serif"; Chart.defaults.font.size=11.5; Chart.defaults.color='#7d928d';
     Object.values(charts).forEach(function(c){ try{c.destroy();}catch(e){} });
 
-    var ecm={}; rows.forEach(function(r){ (ecm[r.branch]=ecm[r.branch]||[]).push(r.net_pct); });
-    var ecL=Object.keys(ecm).sort(), ecV=ecL.map(function(k){return avg(ecm[k]);});
-    charts.ec=new Chart(document.getElementById('c-ec'),{type:'bar',
-      data:{labels:ecL,datasets:[{data:ecV,backgroundColor:ecV.map(col),borderRadius:{topLeft:5,topRight:5},barPercentage:.6}]},
-      options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false},tooltip:{callbacks:{label:function(c){return c.parsed.y+'% compliant';}}}},
-        scales:{y:{beginAtZero:true,max:100,grid:{color:'#eef3f1'},border:{display:false},ticks:{stepSize:25,callback:function(v){return v+'%';}}},x:{grid:{display:false},border:{display:false},ticks:{font:{weight:'600',size:12}}}}}});
+    // ---- Compliance by Experience Centre: bars (all ECs) OR trend (1 EC selected) ----
+    // Subtle per-EC colors.
+    var EC_COLORS={ 'Andheri':'#5b8def', 'HRBR':'#e08a3c', 'HSR':'#48b19a', 'Thane':'#b06cc4' };
+    function ecColor(name,i){ return EC_COLORS[name] || ['#5b8def','#e08a3c','#48b19a','#b06cc4','#c96b7a','#7d8b99'][i%6]; }
+    function weekStart(d){
+      if(!d) return null;
+      var dt=new Date(String(d).replace(' ','T')); if(isNaN(dt)) return null;
+      var day=(dt.getDay()+6)%7;
+      return new Date(dt.getFullYear(),dt.getMonth(),dt.getDate()-day);
+    }
+    function monthStart(d){ var dt=new Date(String(d).replace(' ','T')); if(isNaN(dt))return null; return new Date(dt.getFullYear(),dt.getMonth(),1); }
+    var mode=(document.getElementById('ec-trend-mode')||{}).value || 'weekly';
+    var ecPsub=document.getElementById('ec-psub');
+    var oneEC = (selEC.size===1);
+
+    if(oneEC){
+      // Trend for the single selected EC, weekly or monthly buckets.
+      var ecName=Array.from(selEC)[0];
+      if(ecPsub) ecPsub.textContent = ecName+' \u00b7 '+(mode==='monthly'?'monthly':'weekly')+' compliance trend';
+      var bucket = mode==='monthly'? monthStart : weekStart;
+      var tm={}; rows.forEach(function(r){ var b=bucket(r.cdp_date); if(b){ var k=b.getTime(); (tm[k]=tm[k]||[]).push(r.net_pct); } });
+      var tKeys=Object.keys(tm).map(Number).sort(function(a,b){return a-b;});
+      var lab=function(ts){ var m=new Date(ts); return mode==='monthly'? (MON[m.getMonth()]+" '"+String(m.getFullYear()).slice(2)) : (m.getDate()+' '+MON[m.getMonth()]); };
+      var tL=tKeys.map(lab), tV=tKeys.map(function(k){return avg(tm[k]);});
+      if(tL.length>=2){
+        charts.ec=new Chart(document.getElementById('c-ec'),{type:'line',
+          data:{labels:tL,datasets:[{data:tV,borderColor:ecColor(ecName,0),backgroundColor:'rgba(91,141,239,.08)',fill:true,tension:.35,pointRadius:3,pointBackgroundColor:ecColor(ecName,0),borderWidth:2}]},
+          options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false},tooltip:{callbacks:{label:function(c){return c.parsed.y+'% compliant';}}}},
+            scales:{y:{beginAtZero:true,max:100,grid:{color:'#eef3f1'},border:{display:false},ticks:{stepSize:25,callback:function(v){return v+'%';}}},x:{grid:{display:false},border:{display:false}}}}});
+      } else {
+        var ecc=document.getElementById('c-ec'), cx=ecc.getContext('2d'); cx.clearRect(0,0,ecc.width,ecc.height); cx.font="13px Inter"; cx.fillStyle="#7d928d"; cx.textAlign="center"; cx.fillText("Not enough "+(mode==='monthly'?'months':'weeks')+" in range for a trend", (ecc.width||300)/2, 110);
+      }
+    } else {
+      if(ecPsub) ecPsub.textContent = 'Average compliance across reviewed presentations';
+      var ecm={}; rows.forEach(function(r){ (ecm[r.branch]=ecm[r.branch]||[]).push(r.net_pct); });
+      var ecL=Object.keys(ecm).sort(), ecV=ecL.map(function(k){return avg(ecm[k]);});
+      charts.ec=new Chart(document.getElementById('c-ec'),{type:'bar',
+        data:{labels:ecL,datasets:[{data:ecV,backgroundColor:ecL.map(ecColor),borderRadius:{topLeft:5,topRight:5},barPercentage:.6}]},
+        options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false},tooltip:{callbacks:{label:function(c){return c.parsed.y+'% compliant';}}}},
+          scales:{y:{beginAtZero:true,max:100,grid:{color:'#eef3f1'},border:{display:false},ticks:{stepSize:25,callback:function(v){return v+'%';}}},x:{grid:{display:false},border:{display:false},ticks:{font:{weight:'600',size:12}}}}}});
+    }
 
     charts.param=new Chart(document.getElementById('c-param'),{type:'bar',
       data:{labels:PARAMS.map(function(p){return p[1];}),datasets:[{data:PARAMS.map(function(p){var k=p[0];return rows.length?Math.round(rows.reduce(function(s,r){return s+r.checks[k];},0)*100/rows.length):0;}),backgroundColor:PARAMS.map(function(p){var k=p[0];var v=rows.length?Math.round(rows.reduce(function(s,r){return s+r.checks[k];},0)*100/rows.length):0;return col(v);}),borderRadius:4,barPercentage:.72}]},
       options:{indexAxis:'y',responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false},tooltip:{callbacks:{label:function(c){return c.parsed.x+'% pass';}}}},
         scales:{x:{beginAtZero:true,max:100,grid:{color:'#eef3f1'},border:{display:false},ticks:{stepSize:25,callback:function(v){return v+'%';}}},y:{grid:{display:false},border:{display:false}}}}});
 
+    // DM Ranking
     var dmm={}; rows.forEach(function(r){ if(r.dm) (dmm[r.dm]=dmm[r.dm]||[]).push(r.net_pct); });
     var dm=Object.keys(dmm).map(function(k){return [k,avg(dmm[k])];}).sort(function(x,y){return y[1]-x[1];});
     document.getElementById('dm-rank').innerHTML = dm.length? dm.map(function(p){
       return '<div class="rrow"><div class="nm">'+esc(p[0])+'</div><div class="bar"><span style="width:'+p[1]+'%;background:'+col(p[1])+'"></span></div><div class="pc">'+p[1]+'%</div></div>';
     }).join('') : '<div style="color:var(--muted);font-size:12.5px">No DM data in selection</div>';
 
-    function weekStart(d){
-      if(!d) return null;
-      var dt=new Date(d.replace(' ','T')); if(isNaN(dt)) return null;
-      var day=(dt.getDay()+6)%7;
-      return new Date(dt.getFullYear(),dt.getMonth(),dt.getDate()-day);
-    }
-    function wkKey(d){ var m=weekStart(d); return m? m.getTime():null; }
-    function wkLabel(ts){ var m=new Date(ts); return m.getDate()+' '+MON[m.getMonth()]; }
-    var tm={}; rows.forEach(function(r){ var k=wkKey(r.cdp_date); if(k)(tm[k]=tm[k]||[]).push(r.net_pct); });
-    var tKeys=Object.keys(tm).map(Number).sort(function(a,b){return a-b;});
-    var tL=tKeys.map(wkLabel), tV=tKeys.map(function(k){return avg(tm[k]);});
-    var tc=document.getElementById('c-trend');
-    if (tL.length>=2){
-      charts.trend=new Chart(tc,{type:'line',data:{labels:tL,datasets:[{data:tV,borderColor:'#0b6b5f',backgroundColor:'rgba(11,107,95,.08)',fill:true,tension:.35,pointRadius:3,pointBackgroundColor:'#0b6b5f',borderWidth:2}]},
-        options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{y:{beginAtZero:true,max:100,grid:{color:'#eef3f1'},border:{display:false},ticks:{stepSize:25,callback:function(v){return v+'%';}}},x:{grid:{display:false},border:{display:false}}}}});
-    } else {
-      var ctx=tc.getContext('2d'); ctx.clearRect(0,0,tc.width,tc.height); ctx.font="13px Inter"; ctx.fillStyle="#7d928d"; ctx.textAlign="center"; ctx.fillText("Widen the date range to see the weekly trend", (tc.width||300)/2, 110);
-    }
+    // Designer Ranking (same style as DM Ranking)
+    var dsgm={}; rows.forEach(function(r){ if(r.designer) (dsgm[r.designer]=dsgm[r.designer]||[]).push(r.net_pct); });
+    var dsg=Object.keys(dsgm).map(function(k){return [k,avg(dsgm[k])];}).sort(function(x,y){return y[1]-x[1];});
+    var dsgEl=document.getElementById('dsg-rank');
+    if(dsgEl) dsgEl.innerHTML = dsg.length? dsg.map(function(p){
+      return '<div class="rrow"><div class="nm">'+esc(p[0])+'</div><div class="bar"><span style="width:'+p[1]+'%;background:'+col(p[1])+'"></span></div><div class="pc">'+p[1]+'%</div></div>';
+    }).join('') : '<div style="color:var(--muted);font-size:12.5px">No designer data in selection</div>';
 
     // ---- DEM section (separate phase) ----
     var d1=rows.filter(function(r){return r.dem1;}).length,
@@ -503,9 +557,11 @@
   }
   // generic tick/cross linking to a url (or plain if no url)
   function linkCell(ok, url, title){
-    var cls = ok ? 'tick' : 'cross', sym = ok ? '\u2713' : '\u2717';
-    if(!url) return '<span class="'+cls+'">'+sym+'</span>';
-    return '<a class="'+cls+'" href="'+url+'" target="_blank" title="'+esc(title||'')+'">'+sym+'</a>';
+    // Yes = green dot, No = red cross.
+    var inner = ok ? '<span class="dot-yes"></span>' : '<span class="cross-no">\u2715</span>';
+    var cls = ok ? 'mk mk-yes' : 'mk mk-no';
+    if(!url) return '<span class="'+cls+'">'+inner+'</span>';
+    return '<a class="'+cls+'" href="'+url+'" target="_blank" title="'+esc(title||'')+'">'+inner+'</a>';
   }
   // notes-based checks (RGM/DCM, RGM rec, CDP notes, CDP rec) -> Pulse /notes
   function notesCell(ok, r){ return linkCell(ok, notesUrl(r), 'Open notes in Pulse'); }
