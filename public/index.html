@@ -70,14 +70,16 @@
     #cdp-exec .toggle button{ padding:7px 12px; font-size:12px; }
   }
   #cdp-exec .panel{ background:var(--card); border:1px solid var(--line); border-radius:14px; padding:20px 22px; }
+  /* In the 2x2 chart/ranking grids, lock every panel to one height so the four line up. */
+  #cdp-exec .grid > .panel{ height:340px; display:flex; flex-direction:column; overflow:hidden; }
   #cdp-exec .panel h3{ font-size:14px; font-weight:600; margin:0 0 2px; }
   #cdp-exec .panel .psub{ font-size:11.5px; color:var(--muted); margin:0 0 16px; }
   #cdp-exec .panel-head{ display:flex; align-items:flex-start; justify-content:space-between; gap:10px; }
   #cdp-exec .trend-mode{ font-family:inherit; font-size:11.5px; padding:4px 8px; border:1px solid var(--line); border-radius:7px; background:#fff; color:var(--ink); cursor:pointer; flex-shrink:0; }
-  #cdp-exec .box{ position:relative; height:250px; width:100%; overflow:hidden; } #cdp-exec .box.sm{ height:230px; }
+  #cdp-exec .box{ position:relative; flex:1 1 auto; min-height:0; width:100%; overflow:hidden; } #cdp-exec .box.sm{ flex:1 1 auto; }
   #cdp-exec .box canvas{ max-width:100%; }
-  /* ranking lists: cap height with inner scroll so all 4 panels match */
-  #cdp-exec .rank{ display:flex; flex-direction:column; gap:11px; max-height:250px; overflow-y:auto; padding-right:6px; }
+  /* ranking lists fill the panel's remaining height and scroll internally */
+  #cdp-exec .rank{ display:flex; flex-direction:column; gap:11px; flex:1 1 auto; min-height:0; overflow-y:auto; padding-right:6px; }
   #cdp-exec .rank::-webkit-scrollbar{ width:6px; } #cdp-exec .rank::-webkit-scrollbar-thumb{ background:#d5ddda; border-radius:3px; }
   #cdp-exec .rrow{ display:grid; grid-template-columns:120px 1fr 44px; align-items:center; gap:12px; }
   #cdp-exec .rrow .nm{ font-size:12.5px; color:var(--ink2); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
