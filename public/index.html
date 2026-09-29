@@ -323,7 +323,7 @@
           </table>
         </div>
       </div>
-      <p class="dq-legend"><b>Design Quality (A-E, each rated 0-4, max 20 = 20%):</b> &nbsp; <b>A</b> Customer delight through design &nbsp;&middot;&nbsp; <b>B</b> Render quality &nbsp;&middot;&nbsp; <b>C</b> Space planning &nbsp;&middot;&nbsp; <b>D</b> Theme compliance &nbsp;&middot;&nbsp; <b>E</b> DM review standard</p>
+      <p class="dq-legend"><b>Design Quality (A-E, each rated 0-4; shown as % of 20, and worth 20% of Overall Compliance):</b> &nbsp; <b>A</b> Customer delight through design &nbsp;&middot;&nbsp; <b>B</b> Render quality &nbsp;&middot;&nbsp; <b>C</b> Space planning &nbsp;&middot;&nbsp; <b>D</b> Theme compliance &nbsp;&middot;&nbsp; <b>E</b> DM review standard</p>
     </div>
 
   </div>
@@ -358,6 +358,9 @@
   var DQ_KEYS = ['a','b','c','d','e'];
   var DQ_BY_PID = {};
   function dqTotal(dq){ if(!dq) return null; var any=false,sum=0; DQ_KEYS.forEach(function(k){ var v=dq[k]; if(v!==null&&v!==undefined&&v!==''){any=true;sum+=(parseInt(v,10)||0);} }); return any?sum:null; }
+  // Design Quality shown as % of the 20-point max (14/20 -> 70%). NET still uses
+  // the raw points (0-20) as the weight contribution, so scoring is unchanged.
+  function dqDisplayPct(dq){ var t=dqTotal(dq); return t===null?null:Math.round(t*100/20); }
   function applyDQtoRow(row){ var base=row.net_base||0; var t=dqTotal(row.dq); row.dq_pct=(t===null)?0:t; row.net_pct=base+row.dq_pct; row.net_band=row.net_pct===100?'green':(row.net_pct>=67?'amber':'red'); }
   function loadDesignQuality(){
     return fetch(SUPA_TBL+"?select=project_no,a,b,c,d,e,remarks",{headers:SUPA_HEADERS})
@@ -608,7 +611,7 @@
   window.cdpCloseAI=function(){ document.getElementById('ai-overlay').style.display='none'; };
 
   // Design Quality cells
-  function dqCell(r){ var t=dqTotal(r.dq); return '<span class="dq-total">'+(t===null?'<span class="dq-unrated">-</span>':('<b>'+t+'%</b>'))+'</span>'; }
+  function dqCell(r){ var p=dqDisplayPct(r.dq); return '<span class="dq-total">'+(p===null?'<span class="dq-unrated">-</span>':('<b>'+p+'%</b>'))+'</span>'; }
   function dqParamCell(r,key){ var dq=r.dq||{}; var cur=(dq[key]===null||dq[key]===undefined||dq[key]==='')?'':String(dq[key]); var opts='<option value=""'+(cur===''?' selected':'')+'>-</option>'; for(var i=0;i<=4;i++){opts+='<option value="'+i+'"'+(cur===String(i)?' selected':'')+'>'+i+'</option>';} return '<select class="dq-p" data-pid="'+esc(r.pid)+'" data-k="'+key+'">'+opts+'</select>'; }
   function dqRemarksCell(r){ var dq=r.dq||{}; var val=(dq.remarks||'').replace(/"/g,'&quot;'); return '<input class="dq-remarks" data-pid="'+esc(r.pid)+'" value="'+val+'" placeholder="Add remarks\u2026">'; }
   function dqSaveCell(r){ return '<button type="button" class="dq-save" data-pid="'+esc(r.pid)+'" onclick="cdpSaveDQ(this)">Save</button>'; }
@@ -735,7 +738,7 @@
     var rows = searchRows !== null ? searchRows : filtered();
     var head = ["PID","Client Name","Branch","Designer","Design Manager","CDP Date","Gross Budget","CDP Budget",
       "CDD Form","RGM","RGM Recording","CDP Notes","CDP Recording","DM Review",
-      "DQ-A","DQ-B","DQ-C","DQ-D","DQ-E","Design Quality %","DQ Remarks",
+      "DQ-A","DQ-B","DQ-C","DQ-D","DQ-E","Design Quality %","DQ Weight (of 20)","DQ Remarks",
       "DM:CustReq","DM:Theme","DM:Spatial","DM:Render","DM:Variants","Overall Compliance %","Base %","Missing"];
     function yn(v){return v?"Yes":"No";}
     function q(v){ v=String(v==null?'':v); return /[",\n]/.test(v)?'"'+v.replace(/"/g,'""')+'"':v; }
@@ -744,7 +747,7 @@
       var dqv=function(k){return (dq[k]===null||dq[k]===undefined||dq[k]==='')?'':dq[k];};
       lines.push([r.pid,r.cx,r.branch,r.designer,r.dm,dateOnly(r.cdp_date),r.gross,r.cdp_budget,
         yn(r.checks.cdd_form),yn(r.checks.rgm_notes),yn(r.checks.rgm_rec),yn(r.checks.cdp_notes),yn(r.checks.cdp_rec),yn(r.checks.dm_review),
-        dqv('a'),dqv('b'),dqv('c'),dqv('d'),dqv('e'),(t===null?'':t+'%'),(dq.remarks||''),
+        dqv('a'),dqv('b'),dqv('c'),dqv('d'),dqv('e'),(t===null?'':Math.round(t*100/20)+'%'),(t===null?'':t+'%'),(dq.remarks||''),
         d.customer_requirement,d.theme,d.spatial_planning,d.render,d.quotation_variants,r.net_pct+'%',(r.net_base||0)+'%',r.reason].map(q).join(","));
     });
     var blob=new Blob([lines.join("\n")],{type:"text/csv"});
