@@ -498,8 +498,10 @@
       var tL=tKeys.map(lab), tV=tKeys.map(function(k){return avg(tm[k]);});
       if(tL.length>=2){
         charts.ec=new Chart(document.getElementById('c-ec'),{type:'line',
+          plugins:[window.ChartDataLabels],
           data:{labels:tL,datasets:[{data:tV,borderColor:ecColor(ecName,0),backgroundColor:'rgba(91,141,239,.08)',fill:true,tension:.35,pointRadius:3,pointBackgroundColor:ecColor(ecName,0),borderWidth:2}]},
-          options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false},tooltip:{callbacks:{label:function(c){return c.parsed.y+'% compliant';}}}},
+          options:{responsive:true,maintainAspectRatio:false,layout:{padding:{top:20}},plugins:{legend:{display:false},tooltip:{callbacks:{label:function(c){return c.parsed.y+'% compliant';}}},
+            datalabels:{anchor:'end',align:'top',offset:4,color:'#2c3b37',font:{weight:'700',size:11},formatter:function(v){return v+'%';}}},
             scales:{y:{beginAtZero:true,max:100,grid:{color:'#eef3f1'},border:{display:false},ticks:{stepSize:25,callback:function(v){return v+'%';}}},x:{grid:{display:false},border:{display:false}}}}});
       } else {
         var ecc=document.getElementById('c-ec'), cx=ecc.getContext('2d'); cx.clearRect(0,0,ecc.width,ecc.height); cx.font="13px Inter"; cx.fillStyle="#7d928d"; cx.textAlign="center"; cx.fillText("Not enough "+(mode==='monthly'?'months':'weeks')+" in range for a trend", (ecc.width||300)/2, 110);
