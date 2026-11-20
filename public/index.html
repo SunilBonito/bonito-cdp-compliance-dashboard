@@ -212,7 +212,10 @@
     <div id="v-overview">
       <div style="margin:0 0 14px;display:flex;align-items:center;justify-content:space-between">
         <p class="eyebrow">CDP Compliance &middot; Executive View</p>
-        <button type="button" class="btn btn-ghost" id="png-overview" onclick="cdpDownloadPNG('overview')">&darr; PNG</button>
+        <div style="display:flex;gap:8px;">
+          <button type="button" class="btn btn-go" id="gen-report" onclick="cdpGenerateReport()">&#9993; Generate Monthly Report</button>
+          <button type="button" class="btn btn-ghost" id="png-overview" onclick="cdpDownloadPNG('overview')">&darr; PNG</button>
+        </div>
       </div>
       <div class="kpis">
         <div class="kpi"><p class="lab">Presentations Reviewed</p><div class="val" id="k-total">0</div><div class="foot" id="k-total-foot"></div></div>
@@ -819,6 +822,336 @@
   document.getElementById('f-from').value=dd[0];
   document.getElementById('f-to').value=dd[1];
   load();
+
+
+  /* ============================================================
+     MONTHLY REPORT GENERATOR  (additive, self-contained)
+     Builds the approved CDP Compliance email, fills live numbers,
+     captures PAN India + per-EC snapshots, outputs a .eml file.
+     ============================================================ */
+  (function(){
+    var EC_ORDER = ['HSR','HRBR','Andheri','Thane','Hyderabad'];
+    var PARAM_LABELS = { cdd_form:'CDD Form', rgm_notes:'RGM', rgm_rec:'RGM Recording',
+                         cdp_rec:'CDP Recording', cdp_notes:'CDP Notes', dm_review:'DM Review' };
+
+    function monthLabel(){
+      // use the loaded date range end, else today
+      var d = new Date();
+      try { var e=document.getElementById('d-to'); if(e && e.value) d=new Date(e.value); } catch(x){}
+      var MON=["January","February","March","April","May","June","July","August","September","October","November","December"];
+      return MON[d.getMonth()]+' '+d.getFullYear();
+    }
+
+    // ----- compute helpers that mirror renderOverview -----
+    function avgOf(arr){ return arr.length? Math.round(arr.reduce(function(a,b){return a+b;},0)/arr.length):0; }
+
+    function ecStats(rows){
+      // {EC: {comp, projects, rows:[...]}}
+      var m={};
+      rows.forEach(function(r){ (m[r.branch]=m[r.branch]||[]).push(r); });
+      var out={};
+      Object.keys(m).forEach(function(k){
+        out[k]={ comp:avgOf(m[k].map(function(r){return r.net_pct;})), projects:m[k].length, rows:m[k] };
+      });
+      return out;
+    }
+
+    function dmRank(rows){
+      // avg net_pct per DM (skip blank/Unassigned handled by caller)
+      var m={}; rows.forEach(function(r){ var k=r.dm||'Unassigned'; (m[k]=m[k]||[]).push(r.net_pct); });
+      return Object.keys(m).map(function(k){ return {name:k, pct:avgOf(m[k])}; }).sort(function(a,b){return b.pct-a.pct;});
+    }
+    function dsgnRank(rows){
+      var m={}; rows.forEach(function(r){ var k=r.designer||r.ms_designer; if(!k) return; (m[k]=m[k]||[]).push(r.net_pct); });
+      return Object.keys(m).map(function(k){ return {name:k, pct:avgOf(m[k])}; }).sort(function(a,b){return b.pct-a.pct;});
+    }
+
+    function topBottomPerEC(rows, which){
+      // which='dm' or 'dsgn'. returns {EC: {top:{name,pct}, low:{name,pct}}}
+      var byEC={}; rows.forEach(function(r){ (byEC[r.branch]=byEC[r.branch]||[]).push(r); });
+      var out={};
+      EC_ORDER.forEach(function(ec){
+        var rs=byEC[ec]||[];
+        var rank = which==='dm'? dmRank(rs) : dsgnRank(rs);
+        if(rank.length){ out[ec]={ top:rank[0], low:rank[rank.length-1] }; }
+        else { out[ec]={ top:{name:'-',pct:null}, low:{name:'-',pct:null} }; }
+      });
+      return out;
+    }
+
+    function paramStats(rows){
+      var out=[];
+      Object.keys(PARAM_LABELS).forEach(function(k){
+        var pct = rows.length? Math.round(rows.reduce(function(s,r){return s+(r.checks[k]||0);},0)*100/rows.length):0;
+        out.push({ key:k, label:PARAM_LABELS[k], pct:pct });
+      });
+      out.sort(function(a,b){return a.pct-b.pct;});
+      return out;
+    }
+
+    // ----- snapshot capture: set EC filter, re-render, grab the 2 top charts only -----
+    function loadH2C(cb){
+      if(window.html2canvas) return cb();
+      var s=document.createElement('script');
+      s.src='https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js';
+      s.onload=cb; s.onerror=function(){ cb(new Error('html2canvas load failed')); };
+      document.head.appendChild(s);
+    }
+
+    function captureTopCharts(cb){
+      // capture only the first row of overview (Compliance by EC + Compliance by Parameter),
+      // excluding DM Ranking / Designer Ranking panels.
+      var grid = document.querySelector('#v-overview .grid');  // first grid = the 2 top charts
+      var target = grid || document.getElementById('v-overview');
+      window.html2canvas(target, {backgroundColor:'#ffffff', scale:2, useCORS:true, windowWidth:target.scrollWidth+40})
+        .then(function(canvas){ cb(null, canvas.toDataURL('image/png')); })
+        .catch(function(e){ cb(e); });
+    }
+
+    function wait(ms){ return new Promise(function(res){ setTimeout(res,ms); }); }
+
+    function setECFilter(ec){
+      // mimic choosing one EC in the multiselect
+      selEC.clear();
+      if(ec) selEC.add(ec);
+      rebuildFilters();
+      renderOverview();
+    }
+
+    async function captureAll(progress){
+      var shots={};
+      // 1) PAN India (all ECs)
+      progress('Capturing PAN India view...');
+      selEC.clear(); rebuildFilters(); renderOverview();
+      await wait(650);
+      shots.pan = await new Promise(function(res){ captureTopCharts(function(e,img){ res(e?null:img); }); });
+      // 2) each EC
+      for(var i=0;i<EC_ORDER.length;i++){
+        var ec=EC_ORDER[i];
+        progress('Capturing '+ec+' view... ('+(i+1)+'/5)');
+        setECFilter(ec);
+        await wait(700);
+        shots[ec] = await new Promise(function(res){ captureTopCharts(function(e,img){ res(e?null:img); }); });
+      }
+      // restore all-ECs
+      selEC.clear(); rebuildFilters(); renderOverview();
+      return shots;
+    }
+
+    // ----- fill the approved email HTML template -----
+    function esc(s){ return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+    function pctTxt(p){ return (p===null||p===undefined)? '-' : p+'%'; }
+
+    function buildEmailHTML(data){
+      var M = data.month;
+      function kpi(label, sub, value, vcolor, foot){
+        return '<td width="25%" valign="top" style="padding:4px;"><table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#f4f8f6;border:1px solid #e0ebe6;"><tr><td style="padding:13px 12px;height:78px;" valign="top">'
+          +'<div style="font-size:10px;color:#6c817b;text-transform:uppercase;font-weight:700;letter-spacing:.4px;">'+label+'</div>'
+          +'<div style="font-size:9.5px;color:#9aa6a2;font-weight:600;margin-top:2px;">'+sub+'</div>'
+          +'<div style="font-size:'+(/%$/.test(value)||/^\d+$/.test(value)?'26px':'19px')+';font-weight:800;color:'+vcolor+';margin-top:8px;">'+value+'</div>'
+          +(foot?'<div style="font-size:10.5px;color:'+vcolor+';font-weight:700;margin-top:5px;">'+foot+'</div>':'')
+          +'</td></tr></table></td>';
+      }
+      function imgBlock(title, src){
+        var inner = src ? '<img src="'+src+'" width="628" style="width:100%;max-width:628px;display:block;border:1px solid #e5ece9;border-radius:4px;">'
+                        : '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border:1px dashed #c3d2cd;background:#f7faf9;"><tr><td align="center" style="padding:26px 20px;font-size:11.5px;color:#8a9a95;font-style:italic;">[ '+title+' snapshot not captured - paste manually ]</td></tr></table>';
+        return inner;
+      }
+      function sh(t,c,b){ c=c||'#0f5c43'; b=b||'#14724f'; return '<div style="font-size:12.5px;font-weight:700;color:'+c+';text-transform:uppercase;letter-spacing:.5px;border-left:4px solid '+b+';padding-left:9px;">'+t+'</div>'; }
+      function shMini(t,c,b){ return '<div style="font-size:11.5px;font-weight:700;color:'+c+';letter-spacing:.3px;border-left:3px solid '+b+';padding-left:8px;">'+t+'</div>'; }
+      function band(t){ return '<tr><td style="padding:24px 26px 0;"><table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#0f5c43;border-radius:6px;"><tr><td align="center" style="padding:11px 16px;font-size:14px;font-weight:700;color:#fff;letter-spacing:1px;text-transform:uppercase;">'+t+'</td></tr></table></td></tr>'; }
+
+      function miniTable(title, color, bar, rows, isLow){
+        var h='<td width="50%" valign="top" style="padding-'+(isLow===undefined?'right':'left')+':8px;">';
+        return rows;
+      }
+      function mkMini(title,color,bar,list,lowStyle){
+        var o='        '+shMini(title,color,bar)+'<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin-top:7px;border:1px solid #e5ece9;"><tr style="background:#f4f8f6;color:#4a5c57;"><td style="padding:4px 8px;font-size:9px;font-weight:700;">CENTRE</td><td style="padding:4px 8px;font-size:9px;font-weight:700;">NAME</td><td align="center" style="padding:4px 8px;font-size:9px;font-weight:700;">%</td></tr>';
+        list.forEach(function(row,i){
+          var bg=i%2?' style="background:#fafcfb;"':''; var bb=i<list.length-1?'border-bottom:1px solid #eef3f1;':'';
+          var pill;
+          if(row.pct===null||row.pct===undefined){ pill='<span style="color:#9aa6a2;font-size:10px;">-</span>'; }
+          else if(lowStyle){ var c=row.pct<65?['#fbe6e6','#c0392b']:['#fdf3e2','#b9791a']; pill='<span style="background:'+c[0]+';color:'+c[1]+';font-size:9.5px;font-weight:700;padding:2px 6px;border-radius:9px;">'+row.pct+'%</span>'; }
+          else { pill='<span style="background:#e2f4ea;color:#1a8a52;font-size:9.5px;font-weight:700;padding:2px 6px;border-radius:9px;">'+row.pct+'%</span>'; }
+          o+='<tr'+bg+'><td style="padding:4px 8px;font-size:10.5px;'+bb+'">'+esc(row.ec)+'</td><td style="padding:4px 8px;font-size:10.5px;'+bb+'">'+esc(row.name)+'</td><td align="center" style="padding:4px 8px;'+bb+'">'+pill+'</td></tr>';
+        });
+        return o+'</table>';
+      }
+
+      // PAN KPI row
+      var panKPI = kpi('Compliance','PAN India',data.pan.comp+'%','#0f5c43','')
+                 + kpi('CDP Projects','PAN India',String(data.pan.projects),'#0f5c43','')
+                 + kpi('Highest Compliance','',data.pan.highEC,'#0f5c43',data.pan.highPct+'% compliant')
+                 + kpi('Lowest Compliance','',data.pan.lowEC,'#c0392b',data.pan.lowPct+'% compliant');
+
+      // Best DM location wise table rows (top dm per EC)
+      var bestDMrows='';
+      EC_ORDER.forEach(function(ec,i){
+        var t=data.topDM[ec]||{top:{name:'-',pct:null}};
+        var bb=i<EC_ORDER.length-1?'border-bottom:1px solid #eef3f1;':''; var bg=i%2?' style="background:#fafcfb;"':'';
+        var col=(t.top.pct===null)?'#9aa6a2':(t.top.pct>=75?'#1a8a52':'#b9791a');
+        bestDMrows+='<tr'+bg+'><td style="padding:7px 12px;font-size:12px;'+bb+'">'+ec+'</td><td style="padding:7px 12px;font-size:12px;'+bb+'">'+esc(t.top.name)+'</td><td align="center" style="padding:7px 12px;font-size:12px;font-weight:700;color:'+col+';'+bb+'">'+pctTxt(t.top.pct)+'</td></tr>';
+      });
+
+      // lowest parameters (PAN) - top 3 lowest
+      var lowParams=data.pan.lowParams.slice(0,3);
+      var lowParamRows='';
+      lowParams.forEach(function(p,i){
+        var bb=i<lowParams.length-1?'border-bottom:1px solid #eef3f1;':''; var bg=i%2?' style="background:#fafcfb;"':'';
+        var col=p.pct<70?'#c0392b':'#b9791a';
+        lowParamRows+='<tr'+bg+'><td style="padding:7px 12px;font-size:12px;'+bb+'">'+esc(p.label)+'</td><td align="center" style="padding:7px 12px;font-size:12px;font-weight:700;color:'+col+';'+bb+'">'+p.pct+'%</td></tr>';
+      });
+
+      // EC KPI cards (5)
+      var ecCards='';
+      EC_ORDER.forEach(function(ec){
+        var s=data.ec[ec]; var comp=s?s.comp+'%':'-'; var proj=s?s.projects:0; var cc=s?'#0f5c43':'#9aa6a2';
+        ecCards+='<td width="20%" valign="top" style="padding:3px;"><table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#f4f8f6;border:1px solid #e0ebe6;"><tr><td style="padding:11px 10px;height:68px;" valign="top">'
+          +'<div style="font-size:9.5px;color:#6c817b;text-transform:uppercase;font-weight:700;letter-spacing:.3px;">'+ec+'</div>'
+          +'<div style="font-size:8.5px;color:#9aa6a2;font-weight:600;margin-top:2px;">Compliance</div>'
+          +'<div style="font-size:20px;font-weight:800;color:'+cc+';margin-top:6px;">'+comp+'</div>'
+          +'<div style="font-size:9px;color:#9aa6a2;font-weight:600;margin-top:5px;">'+proj+' CDP projects</div>'
+          +'</td></tr></table></td>';
+      });
+
+      // EC observations (auto)
+      var ecObs='';
+      var ranked = EC_ORDER.filter(function(e){return data.ec[e];}).sort(function(a,b){return data.ec[b].comp-data.ec[a].comp;});
+      ranked.forEach(function(ec,i){
+        var s=data.ec[ec]; var col = i===0?'#1a8a52':(i===ranked.length-1?'#c0392b':'#b9791a');
+        var note = i===0?'Best performing EC at '+s.comp+'%.':(i===ranked.length-1?'Lowest EC at '+s.comp+'%, needs focus on CDP Recording and Notes.':'At '+s.comp+'%, steady performance.');
+        var sep=i>0?'<div style="border-top:1px dashed #d8e4df;"></div>':'';
+        ecObs+=sep+'<table role="presentation" width="100%" cellpadding="0" cellspacing="0"><tr><td width="12" valign="top" style="padding-top:5px;"><span style="display:inline-block;width:7px;height:7px;background:'+col+';border-radius:50%;">&nbsp;</span></td><td style="font-size:12px;line-height:1.45;padding:3px 0;"><b style="color:'+col+';">'+ec+':</b> '+note+'</td></tr></table>';
+      });
+
+      // DM/Designer pair lists
+      var topDMlist=EC_ORDER.map(function(ec){var t=data.topDM[ec];return {ec:ec,name:t?t.top.name:'-',pct:t?t.top.pct:null};});
+      var lowDMlist=EC_ORDER.map(function(ec){var t=data.topDM[ec];return {ec:ec,name:t?t.low.name:'-',pct:t?t.low.pct:null};});
+      var topDGlist=EC_ORDER.map(function(ec){var t=data.topDG[ec];return {ec:ec,name:t?t.top.name:'-',pct:t?t.top.pct:null};});
+      var lowDGlist=EC_ORDER.map(function(ec){var t=data.topDG[ec];return {ec:ec,name:t?t.low.name:'-',pct:t?t.low.pct:null};});
+
+      // EC snapshots (5 slots)
+      var ecShots='';
+      EC_ORDER.forEach(function(ec){
+        ecShots+='<tr><td style="padding-bottom:14px;"><div style="font-size:11px;font-weight:700;color:#0f5c43;margin-bottom:5px;">'+ec+'</div>'
+          +'<table role="presentation" width="100%" cellpadding="0" cellspacing="0"><tr><td align="center">'+imgBlock(ec,data.shots[ec])+'</td></tr></table></td></tr>';
+      });
+
+      var H='<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>'
+      +'<body style="margin:0;padding:0;background:#eef2f1;"><table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#eef2f1;padding:18px 0;"><tr><td align="center">'
+      +'<table role="presentation" width="680" cellpadding="0" cellspacing="0" style="width:680px;max-width:680px;background:#ffffff;font-family:Segoe UI,Arial,sans-serif;color:#1d2a26;">'
+      +'<tr><td style="padding:24px 26px 4px;"><p style="margin:0;font-size:13.5px;line-height:1.55;">Dear All,</p><p style="margin:10px 0 0;font-size:13.5px;line-height:1.55;">Please find the PAN India, EC wise and Design Manager wise CDP Compliance performance for '+M+'. The dashboard snapshots for all centres are included below so each EC can see where they stand against the others.</p></td></tr>'
+      +'<tr><td style="padding:16px 26px 0;"><table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#0f5c43;border-radius:8px;"><tr><td align="center" style="padding:22px 20px;"><div style="font-size:11px;letter-spacing:3px;text-transform:uppercase;color:#9fd8c2;">Bonito Designs</div><div style="font-size:22px;font-weight:700;color:#fff;margin-top:6px;">CDP Compliance Monthly Report - '+M+'</div></td></tr></table></td></tr>'
+      +band('PAN India Details')
+      +'<tr><td style="padding:14px 26px 0;"><table role="presentation" width="100%" cellpadding="0" cellspacing="0"><tr>'+panKPI+'</tr></table></td></tr>'
+      +'<tr><td style="padding:22px 26px 0;">'+sh('Key Observations - '+M)+'<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#f4f8f6;margin-top:12px;"><tr><td style="padding:14px 18px;">'
+        +'<table role="presentation" width="100%" cellpadding="0" cellspacing="0"><tr><td width="14" valign="top" style="padding-top:4px;"><span style="display:inline-block;width:8px;height:8px;background:#1a8a52;border-radius:50%;">&nbsp;</span></td><td style="font-size:12.8px;line-height:1.5;padding:4px 0;"><b style="color:#0f5c43;">Overall compliance:</b> PAN India CDP compliance was '+data.pan.comp+'% in '+M+(data.pan.prev!==null?', as compared to '+data.pan.prev+'% in the previous month':'')+'.</td></tr></table>'
+        +'<div style="border-top:1px dashed #d8e4df;"></div>'
+        +'<table role="presentation" width="100%" cellpadding="0" cellspacing="0"><tr><td width="14" valign="top" style="padding-top:4px;"><span style="display:inline-block;width:8px;height:8px;background:#1a8a52;border-radius:50%;">&nbsp;</span></td><td style="font-size:12.8px;line-height:1.5;padding:4px 0;"><b style="color:#0f5c43;">Highest and lowest compliance:</b> '+data.pan.highEC+' led at '+data.pan.highPct+'% as the best performing centre, while '+data.pan.lowEC+' was the lowest at '+data.pan.lowPct+'%.</td></tr></table>'
+      +'</td></tr></table></td></tr>'
+      +'<tr><td style="padding:18px 26px 0;">'+sh('Best DM - Location wise')+'<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin-top:10px;border:1px solid #e5ece9;"><tr style="background:#f4f8f6;color:#4a5c57;"><td style="padding:7px 12px;font-size:11px;font-weight:700;">CENTRE</td><td style="padding:7px 12px;font-size:11px;font-weight:700;">DESIGN MANAGER (DM)</td><td align="center" style="padding:7px 12px;font-size:11px;font-weight:700;">COMPLIANCE</td></tr>'+bestDMrows+'</table></td></tr>'
+      +'<tr><td style="padding:18px 26px 0;">'+sh('Lowest Compliance','#c0392b','#c0392b')+'<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin-top:10px;border:1px solid #e5ece9;"><tr style="background:#f4f8f6;color:#4a5c57;"><td style="padding:7px 12px;font-size:10.5px;font-weight:700;">PARAMETER</td><td align="center" style="padding:7px 12px;font-size:10.5px;font-weight:700;">PAN INDIA %</td></tr>'+lowParamRows+'</table></td></tr>'
+      +'<tr><td style="padding:22px 26px 0;">'+sh('Dashboard Snapshot - All Locations')+'<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin-top:10px;"><tr><td align="center">'+imgBlock('PAN India',data.shots.pan)+'</td></tr></table></td></tr>'
+      +band('EC wise Details')
+      +'<tr><td style="padding:14px 22px 0;"><table role="presentation" width="100%" cellpadding="0" cellspacing="0"><tr>'+ecCards+'</tr></table></td></tr>'
+      +'<tr><td style="padding:20px 26px 0;">'+sh('EC wise Key Observations')+'<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#f4f8f6;margin-top:10px;"><tr><td style="padding:12px 16px;">'+ecObs+'</td></tr></table></td></tr>'
+      +'<tr><td style="padding:18px 26px 0;"><table role="presentation" width="100%" cellpadding="0" cellspacing="0"><tr><td width="50%" valign="top" style="padding-right:8px;">'+mkMini('Top Performing DMs','#1a8a52','#1a8a52',topDMlist,false)+'</td><td width="50%" valign="top" style="padding-left:8px;">'+mkMini('Top Performing Designers','#1a8a52','#1a8a52',topDGlist,false)+'</td></tr></table></td></tr>'
+      +'<tr><td style="padding:16px 26px 0;"><table role="presentation" width="100%" cellpadding="0" cellspacing="0"><tr><td width="50%" valign="top" style="padding-right:8px;">'+mkMini('Lowest Scoring DMs','#c0392b','#c0392b',lowDMlist,true)+'</td><td width="50%" valign="top" style="padding-left:8px;">'+mkMini('Lowest Scoring Designers','#c0392b','#c0392b',lowDGlist,true)+'</td></tr></table></td></tr>'
+      +'<tr><td style="padding:22px 26px 0;">'+sh('EC wise CDP Snapshot - All 5 Locations')+'<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin-top:10px;">'+ecShots+'</table></td></tr>'
+      +'<tr><td style="padding:20px 26px 24px;"><p style="margin:0;font-size:13px;line-height:1.5;">Best Regards,<br><b>Innovation Lab</b><br><span style="color:#6c817b;font-size:12px;">Bonito Designs</span></p></td></tr>'
+      +'<tr><td style="background:#f4f8f6;padding:12px 26px;border-top:1px solid #e5ece9;"><table role="presentation" width="100%" cellpadding="0" cellspacing="0"><tr><td style="font-size:10px;color:#9aa6a2;">Bonito Designs - CDP Compliance Report</td><td align="right" style="font-size:10px;color:#9aa6a2;">Confidential &middot; For leadership review</td></tr></table></td></tr>'
+      +'</table></td></tr></table></body></html>';
+      return H;
+    }
+
+    // ----- package as .eml (quoted-printable not needed; base64 body) -----
+    function b64(str){ return btoa(unescape(encodeURIComponent(str))); }
+    function buildEML(subject, html){
+      var CRLF='\r\n';
+      var lines=[
+        'From: Innovation Lab <ilab@bonito.in>',
+        'To: ',
+        'Subject: '+subject,
+        'Date: '+new Date().toUTCString(),
+        'MIME-Version: 1.0',
+        'Content-Type: text/html; charset=UTF-8',
+        'Content-Transfer-Encoding: base64',
+        '',
+        b64(html)
+      ];
+      return lines.join(CRLF);
+    }
+
+    function downloadBlob(name, text, type){
+      var blob=new Blob([text],{type:type||'application/octet-stream'});
+      var a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download=name; a.click();
+      setTimeout(function(){ URL.revokeObjectURL(a.href); }, 1500);
+    }
+
+    // ----- status overlay -----
+    function overlay(msg){
+      var o=document.getElementById('gen-overlay');
+      if(!o){
+        o=document.createElement('div'); o.id='gen-overlay';
+        o.style.cssText='position:fixed;inset:0;background:rgba(15,92,67,.92);color:#fff;z-index:99999;display:flex;align-items:center;justify-content:center;font-family:Segoe UI,Arial,sans-serif;font-size:16px;font-weight:600;text-align:center;padding:30px;';
+        document.body.appendChild(o);
+      }
+      o.innerHTML='<div><div style="font-size:30px;margin-bottom:14px;">&#9993;</div>'+msg+'<div style="font-size:12px;font-weight:400;margin-top:12px;opacity:.8;">Please wait, the dashboard is cycling through each EC...</div></div>';
+      o.style.display='flex';
+    }
+    function hideOverlay(){ var o=document.getElementById('gen-overlay'); if(o) o.style.display='none'; }
+
+    // ----- main entry -----
+    window.cdpGenerateReport = function(){
+      // save current filter state to restore
+      var savedEC = Array.from(selEC);
+      overlay('Starting report generation...');
+      loadH2C(function(err){
+        if(err){ hideOverlay(); alert('Could not load image library. Check network.'); return; }
+        var allRows = (typeof filtered==='function')? filtered() : [];
+        if(!allRows.length){ hideOverlay(); alert('No data loaded. Load a date range first.'); return; }
+
+        captureAll(function(p){ overlay(p); }).then(function(shots){
+          overlay('Building the email...');
+          // compute (use unfiltered-by-EC rows = full loaded set)
+          var baseRows = (typeof rowsExcept==='function')? rowsExcept('ec') : allRows; // all ECs
+          var ecs = ecStats(baseRows);
+          var ecRank = Object.keys(ecs).sort(function(a,b){return ecs[b].comp-ecs[a].comp;});
+          var highEC = ecRank[0]||'-', lowEC = ecRank[ecRank.length-1]||'-';
+          var params = paramStats(baseRows);
+          var data = {
+            month: monthLabel(),
+            pan: {
+              comp: avgOf(baseRows.map(function(r){return r.net_pct;})),
+              projects: baseRows.length,
+              prev: null,  // previous month not tracked yet; left blank
+              highEC: highEC, highPct: ecs[highEC]?ecs[highEC].comp:0,
+              lowEC: lowEC, lowPct: ecs[lowEC]?ecs[lowEC].comp:0,
+              lowParams: params
+            },
+            ec: ecs,
+            topDM: topBottomPerEC(baseRows,'dm'),
+            topDG: topBottomPerEC(baseRows,'dsgn'),
+            shots: shots
+          };
+          var html = buildEmailHTML(data);
+          var subject = 'PAN India: CDP Compliance Monthly Performance Report - '+data.month;
+          var eml = buildEML(subject, html);
+          downloadBlob('CDP_Compliance_Report_'+data.month.replace(' ','_')+'.eml', eml, 'message/rfc822');
+          // also offer the raw html as fallback
+          hideOverlay();
+          // restore filter
+          selEC.clear(); savedEC.forEach(function(x){selEC.add(x);}); rebuildFilters(); renderOverview();
+          alert('Report generated. The .eml file has downloaded - open it in Outlook, add recipients, and send.');
+        }).catch(function(e){
+          hideOverlay();
+          selEC.clear(); savedEC.forEach(function(x){selEC.add(x);}); rebuildFilters(); renderOverview();
+          alert('Generation failed: '+(e&&e.message||e));
+        });
+      });
+    };
+  })();
+
 })();
 </script>
 </div>
