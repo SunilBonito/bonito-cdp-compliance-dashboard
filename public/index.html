@@ -837,9 +837,27 @@
     function monthLabel(){
       // use the loaded date range end, else today
       var d = new Date();
-      try { var e=document.getElementById('d-to'); if(e && e.value) d=new Date(e.value); } catch(x){}
+      try { var e=document.getElementById('f-to'); if(e && e.value) d=new Date(e.value); } catch(x){}
       var MON=["January","February","March","April","May","June","July","August","September","October","November","December"];
       return MON[d.getMonth()]+' '+d.getFullYear();
+    }
+
+    // ----- previous-month compliance memory (per browser) -----
+    function monthKey(label){ return label; } // label already "Month YYYY"
+    function prevLabel(label){
+      var MON=["January","February","March","April","May","June","July","August","September","October","November","December"];
+      var parts=label.split(' '); var mi=MON.indexOf(parts[0]); var yr=parseInt(parts[1],10);
+      if(mi<0||isNaN(yr)) return null;
+      mi-=1; if(mi<0){ mi=11; yr-=1; }
+      return MON[mi]+' '+yr;
+    }
+    function readStore(){ try{ return JSON.parse(localStorage.getItem('cdp_month_comp')||'{}'); }catch(e){ return {}; } }
+    function prevMonthComp(label){
+      var store=readStore(); var pl=prevLabel(label);
+      return (pl && store[pl]!=null)? store[pl] : null;
+    }
+    function rememberMonthComp(label, comp){
+      try{ var store=readStore(); store[label]=comp; localStorage.setItem('cdp_month_comp', JSON.stringify(store)); }catch(e){}
     }
 
     // ----- compute helpers that mirror renderOverview -----
@@ -856,13 +874,14 @@
       return out;
     }
 
+    function isRealName(k){ return k && !/^unassigned$/i.test(k.trim()) && k.trim()!=='-'; }
     function dmRank(rows){
-      // avg net_pct per DM (skip blank/Unassigned handled by caller)
-      var m={}; rows.forEach(function(r){ var k=r.dm||'Unassigned'; (m[k]=m[k]||[]).push(r.net_pct); });
+      // avg net_pct per DM; skip blank / "Unassigned" so only real names show.
+      var m={}; rows.forEach(function(r){ var k=r.dm; if(!isRealName(k)) return; (m[k]=m[k]||[]).push(r.net_pct); });
       return Object.keys(m).map(function(k){ return {name:k, pct:avgOf(m[k])}; }).sort(function(a,b){return b.pct-a.pct;});
     }
     function dsgnRank(rows){
-      var m={}; rows.forEach(function(r){ var k=r.designer||r.ms_designer; if(!k) return; (m[k]=m[k]||[]).push(r.net_pct); });
+      var m={}; rows.forEach(function(r){ var k=r.designer||r.ms_designer; if(!isRealName(k)) return; (m[k]=m[k]||[]).push(r.net_pct); });
       return Object.keys(m).map(function(k){ return {name:k, pct:avgOf(m[k])}; }).sort(function(a,b){return b.pct-a.pct;});
     }
 
@@ -1014,12 +1033,19 @@
           +'</td></tr></table></td>';
       });
 
-      // EC observations (auto)
+      // EC observations (auto) - each EC shows what it is strong in and where it needs focus.
       var ecObs='';
       var ranked = EC_ORDER.filter(function(e){return data.ec[e];}).sort(function(a,b){return data.ec[b].comp-data.ec[a].comp;});
       ranked.forEach(function(ec,i){
         var s=data.ec[ec]; var col = i===0?'#1a8a52':(i===ranked.length-1?'#c0392b':'#b9791a');
-        var note = i===0?'Best performing EC at '+s.comp+'%.':(i===ranked.length-1?'Lowest EC at '+s.comp+'%, needs focus on CDP Recording and Notes.':'At '+s.comp+'%, steady performance.');
+        var ps = (data.ecParams && data.ecParams[ec]) || [];   // sorted ascending by pct
+        var strong = ps.slice().sort(function(a,b){return b.pct-a.pct;}).filter(function(p){return p.pct>=80;}).slice(0,3).map(function(p){return p.label;});
+        var weak   = ps.filter(function(p){return p.pct<65;}).slice(0,2).map(function(p){return p.label;});
+        var pos = i===0?'Best performing EC':(i===ranked.length-1?'Lowest EC':'Steady');
+        var note = pos+' at '+s.comp+'%';
+        if(strong.length){ note += ', strong on '+strong.join(', '); }
+        if(weak.length){ note += '. Needs focus on '+weak.join(' and '); }
+        note += '.';
         var sep=i>0?'<div style="border-top:1px dashed #d8e4df;"></div>':'';
         ecObs+=sep+'<table role="presentation" width="100%" cellpadding="0" cellspacing="0"><tr><td width="12" valign="top" style="padding-top:5px;"><span style="display:inline-block;width:7px;height:7px;background:'+col+';border-radius:50%;">&nbsp;</span></td><td style="font-size:12px;line-height:1.45;padding:3px 0;"><b style="color:'+col+';">'+ec+':</b> '+note+'</td></tr></table>';
       });
@@ -1040,16 +1066,16 @@
       var H='<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>'
       +'<body style="margin:0;padding:0;background:#eef2f1;"><table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#eef2f1;padding:18px 0;"><tr><td align="center">'
       +'<table role="presentation" width="680" cellpadding="0" cellspacing="0" style="width:680px;max-width:680px;background:#ffffff;font-family:Segoe UI,Arial,sans-serif;color:#1d2a26;">'
-      +'<tr><td style="padding:24px 26px 4px;"><p style="margin:0;font-size:13.5px;line-height:1.55;">Dear All,</p><p style="margin:10px 0 0;font-size:13.5px;line-height:1.55;">Please find the PAN India, EC wise and Design Manager wise CDP Compliance performance for '+M+'. The dashboard snapshots for all centres are included below so each EC can see where they stand against the others.</p></td></tr>'
-      +'<tr><td style="padding:16px 26px 0;"><table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#0f5c43;border-radius:8px;"><tr><td align="center" style="padding:22px 20px;"><div style="font-size:11px;letter-spacing:3px;text-transform:uppercase;color:#9fd8c2;">Bonito Designs</div><div style="font-size:22px;font-weight:700;color:#fff;margin-top:6px;">CDP Compliance Monthly Report - '+M+'</div></td></tr></table></td></tr>'
+      +'<tr><td style="padding:18px 26px 2px;"><p style="margin:0;font-size:13.5px;line-height:1.55;">Dear All,</p><p style="margin:10px 0 0;font-size:13.5px;line-height:1.55;">Please find the PAN India and EC wise CDP Compliance performance for '+M+'. The dashboard snapshots for all centres are included below so each EC can see where they stand against the others.</p></td></tr>'
+      +'<tr><td style="padding:10px 26px 0;"><table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#0f5c43;border-radius:8px;"><tr><td align="center" style="padding:22px 20px;"><div style="font-size:11px;letter-spacing:3px;text-transform:uppercase;color:#9fd8c2;">Bonito Designs</div><div style="font-size:22px;font-weight:700;color:#fff;margin-top:6px;">CDP Compliance Monthly Report - '+M+'</div></td></tr></table></td></tr>'
       +band('PAN India Details')
       +'<tr><td style="padding:14px 26px 0;"><table role="presentation" width="100%" cellpadding="0" cellspacing="0"><tr>'+panKPI+'</tr></table></td></tr>'
       +'<tr><td style="padding:22px 26px 0;">'+sh('Key Observations - '+M)+'<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#f4f8f6;margin-top:12px;"><tr><td style="padding:14px 18px;">'
-        +'<table role="presentation" width="100%" cellpadding="0" cellspacing="0"><tr><td width="14" valign="top" style="padding-top:4px;"><span style="display:inline-block;width:8px;height:8px;background:#1a8a52;border-radius:50%;">&nbsp;</span></td><td style="font-size:12.8px;line-height:1.5;padding:4px 0;"><b style="color:#0f5c43;">Overall compliance:</b> PAN India CDP compliance was '+data.pan.comp+'% in '+M+(data.pan.prev!==null?', as compared to '+data.pan.prev+'% in the previous month':'')+'.</td></tr></table>'
+        +'<table role="presentation" width="100%" cellpadding="0" cellspacing="0"><tr><td width="14" valign="top" style="padding-top:4px;"><span style="display:inline-block;width:8px;height:8px;background:#1a8a52;border-radius:50%;">&nbsp;</span></td><td style="font-size:12.8px;line-height:1.5;padding:4px 0;"><b style="color:#0f5c43;">Overall compliance:</b> PAN India CDP compliance was '+data.pan.comp+'% in '+M+(data.pan.prev!==null?', as compared to '+data.pan.prev+'% in the previous month ('+(data.pan.comp>=data.pan.prev?'up ':'down ')+Math.abs(data.pan.comp-data.pan.prev)+'%)':'')+'.</td></tr></table>'
         +'<div style="border-top:1px dashed #d8e4df;"></div>'
         +'<table role="presentation" width="100%" cellpadding="0" cellspacing="0"><tr><td width="14" valign="top" style="padding-top:4px;"><span style="display:inline-block;width:8px;height:8px;background:#1a8a52;border-radius:50%;">&nbsp;</span></td><td style="font-size:12.8px;line-height:1.5;padding:4px 0;"><b style="color:#0f5c43;">Highest and lowest compliance:</b> '+data.pan.highEC+' led at '+data.pan.highPct+'% as the best performing centre, while '+data.pan.lowEC+' was the lowest at '+data.pan.lowPct+'%.</td></tr></table>'
       +'</td></tr></table></td></tr>'
-      +'<tr><td style="padding:18px 26px 0;">'+sh('Best DM - Location wise')+'<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin-top:10px;border:1px solid #e5ece9;"><tr style="background:#f4f8f6;color:#4a5c57;"><td style="padding:7px 12px;font-size:11px;font-weight:700;">CENTRE</td><td style="padding:7px 12px;font-size:11px;font-weight:700;">DESIGN MANAGER (DM)</td><td align="center" style="padding:7px 12px;font-size:11px;font-weight:700;">COMPLIANCE</td></tr>'+bestDMrows+'</table></td></tr>'
+      +'<tr><td style="padding:18px 26px 0;">'+sh('Best DM - Location wise')+'<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin-top:10px;border:1px solid #e5ece9;"><tr style="background:#f4f8f6;color:#4a5c57;"><td style="padding:7px 12px;font-size:11px;font-weight:700;">CENTRE</td><td style="padding:7px 12px;font-size:11px;font-weight:700;">NAME</td><td align="center" style="padding:7px 12px;font-size:11px;font-weight:700;">COMPLIANCE</td></tr>'+bestDMrows+'</table></td></tr>'
       +'<tr><td style="padding:18px 26px 0;">'+sh('Lowest Compliance','#c0392b','#c0392b')+'<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin-top:10px;border:1px solid #e5ece9;"><tr style="background:#f4f8f6;color:#4a5c57;"><td style="padding:7px 12px;font-size:10.5px;font-weight:700;">PARAMETER</td><td align="center" style="padding:7px 12px;font-size:10.5px;font-weight:700;">PAN INDIA %</td></tr>'+lowParamRows+'</table></td></tr>'
       +'<tr><td style="padding:22px 26px 0;">'+sh('Dashboard Snapshot - All Locations')+'<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin-top:10px;"><tr><td align="center">'+imgBlock('PAN India',data.shots.pan)+'</td></tr></table></td></tr>'
       +band('EC wise Details')
@@ -1119,17 +1145,33 @@
           var ecRank = Object.keys(ecs).sort(function(a,b){return ecs[b].comp-ecs[a].comp;});
           var highEC = ecRank[0]||'-', lowEC = ecRank[ecRank.length-1]||'-';
           var params = paramStats(baseRows);
+          var panComp = avgOf(baseRows.map(function(r){return r.net_pct;}));
+          var mLabel = monthLabel();
+
+          // per-EC parameter pass rates (for strong/weak observations)
+          var ecParams={};
+          EC_ORDER.forEach(function(ec){
+            var rs=baseRows.filter(function(r){return r.branch===ec;});
+            ecParams[ec]= rs.length? paramStats(rs) : [];
+          });
+
+          // previous-month compliance: remembered per browser from last month's run
+          var prev = prevMonthComp(mLabel);
+          // remember this month's number for next time
+          rememberMonthComp(mLabel, panComp);
+
           var data = {
-            month: monthLabel(),
+            month: mLabel,
             pan: {
-              comp: avgOf(baseRows.map(function(r){return r.net_pct;})),
+              comp: panComp,
               projects: baseRows.length,
-              prev: null,  // previous month not tracked yet; left blank
+              prev: prev,  // null if no prior month stored yet
               highEC: highEC, highPct: ecs[highEC]?ecs[highEC].comp:0,
               lowEC: lowEC, lowPct: ecs[lowEC]?ecs[lowEC].comp:0,
               lowParams: params
             },
             ec: ecs,
+            ecParams: ecParams,
             topDM: topBottomPerEC(baseRows,'dm'),
             topDG: topBottomPerEC(baseRows,'dsgn'),
             shots: shots
